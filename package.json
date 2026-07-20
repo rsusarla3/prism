@@ -1,0 +1,20 @@
+{
+  "name": "prism-monorepo",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Prism adaptive Chrome learning copilot - hackathon monorepo",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "build": "npm run build -w prism-shared && npm run build -w prism-verifiers && npm run build -w prism-curriculum && npm run build -w prism-learning-engine && npm run build -w prism-api-client",
+    "test": "npm run build && vitest run",
+    "dev:web": "node apps/web/server.js"
+  },
+  "devDependencies": {
+    "@types/node": "^22.5.0",
+    "typescript": "^5.5.4",
+    "vitest": "^2.0.5"
+  }
+}
