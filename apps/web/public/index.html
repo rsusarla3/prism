@@ -28,6 +28,22 @@
   .ok { color:var(--ok); } .warn { color:var(--warn); }
   .pill { display:inline-block; background:#232a4d; color:var(--muted); border-radius:999px; padding:3px 10px; font-size:12px; margin-left:6px; }
   details { margin-top:8px; } summary { cursor:pointer; color:var(--muted); }
+  /* Visual Lab balance */
+  .balance { display:flex; align-items:flex-end; justify-content:center; gap:0; margin:18px 0; user-select:none; }
+  .pan { width:200px; min-height:120px; border-bottom:3px solid #4a5286; position:relative; display:flex; flex-wrap:wrap; align-content:flex-end; gap:6px; padding:8px; border-radius:0 0 6px 6px; background:#11162b; }
+  .beam { width:14px; align-self:flex-end; background:#4a5286; position:relative; }
+  .beam::after { content:''; position:absolute; top:-7px; left:-7px; width:28px; height:14px; background:#5a63a0; border-radius:4px; }
+  .token { background:var(--accent); color:#fff; border-radius:50%; width:34px; height:34px; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700; cursor:grab; }
+  .token.x { background:#37d39b; }
+  .token.const { background:#ffb454; color:#1a1f35; }
+  .token.removable { outline:2px dashed #fff6; }
+  .pan-label { text-align:center; color:var(--muted); font-size:12px; margin-top:6px; }
+  .quiz-q { margin:12px 0; }
+  .quiz-q .opts { display:grid; gap:6px; margin-top:6px; }
+  .opt { background:#232a4d; border:1px solid #363d68; border-radius:9px; padding:8px 11px; cursor:pointer; }
+  .opt.sel { border-color:var(--accent); background:var(--accent); color:#fff; }
+  .opt.ok { border-color:var(--ok); background:#13402f; }
+  .opt.bad { border-color:var(--warn); background:#4a3413; }
 </style>
 </head>
 <body>
@@ -65,6 +81,39 @@
     </div>
     <button id="sim" style="margin-top:12px">Simulate</button>
     <div id="simOut" class="log" style="margin-top:10px"></div>
+  </section>
+
+  <section class="card">
+    <h2>Visual Lab — Balance Model <span class="pill">interactive</span></h2>
+    <p style="color:var(--muted);margin:0 0 4px">A balance shows the <i>equality</i> rule: do the same to both sides.
+       Click a matching token on each pan to remove equal value and simplify the equation.</p>
+    <label>Equation to model</label>
+    <input id="vlEq" value="2x + 3 = x + 5" />
+    <button id="vlLoad" style="margin-top:10px">Load balance</button>
+    <div class="balance">
+      <div>
+        <div class="pan" id="panL"></div>
+        <div class="pan-label">Left</div>
+      </div>
+      <div class="beam"></div>
+      <div>
+        <div class="pan" id="panR"></div>
+        <div class="pan-label">Right</div>
+      </div>
+    </div>
+    <div id="vlState" class="log"></div>
+    <div class="row">
+      <button id="vlRemoveX" class="ghost">Remove one x from both sides</button>
+      <button id="vlRemoveConst" class="ghost">Remove 3 from both sides</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Quiz — Comprehension Check <span class="pill">from curriculum</span></h2>
+    <label>Concept</label>
+    <input id="quizConcept" value="linear-equation" />
+    <button id="quizGen" style="margin-top:10px">Generate quiz</button>
+    <div id="quizBox"></div>
   </section>
 </main>
 
@@ -138,6 +187,62 @@ $('sim').onclick = async () => {
   const r = await api('/api/life/simulate', { sessionId: sessionId||'demo', profile });
   $('simOut').innerHTML = `Balance: $${r.balance.toLocaleString()}\nContributed: $${r.contributed.toLocaleString()}\nGrowth: $${r.growth.toLocaleString()}\nFee drag: $${r.feeDrag.toLocaleString()}  (vs 0% fee)`;
 };
+
+// ---- Visual Lab: pan balance ----
+// State is the equation as token counts: { xL, cL, xR, cR }.
+let vl = { xL:0, cL:0, xR:0, cR:0 };
+function renderBalance() {
+  const mk = (n, cls, label) => Array.from({length:n}, () => `<div class="token ${cls}">${label}</div>`).join('');
+  $('panL').innerHTML = mk(vl.xL,'x','x') + mk(vl.cL,'const','1');
+  $('panR').innerHTML = mk(vl.xR,'x','x') + mk(vl.cR,'const','1');
+  $('vlState').textContent = `Model: ${vl.xL}x + ${vl.cL}  =  ${vl.xR}x + ${vl.cR}`;
+}
+$('vlLoad').onclick = () => {
+  const m = $('vlEq').value.match(/(\d*)x\s*\+\s*(\d+)\s*=\s*(\d*)x\s*\+\s*(\d+)/i);
+  if (!m) { $('vlState').textContent = 'Format not recognized (use like "2x + 3 = x + 5").'; return; }
+  const n = (s) => s === '' ? 1 : Number(s);
+  vl = { xL:n(m[1]), cL:Number(m[2]), xR:n(m[3]), cR:Number(m[4]) };
+  renderBalance();
+};
+$('vlRemoveX').onclick = () => { if (vl.xL>0 && vl.xR>0) { vl.xL--; vl.xR--; renderBalance(); } };
+$('vlRemoveConst').onclick = () => { if (vl.cL>0 && vl.cR>0) { vl.cL--; vl.cR--; renderBalance(); } };
+$('vlLoad').onclick(); // initial render
+
+// ---- Quiz ----
+let quizData = null;
+let quizSel = [];
+$('quizGen').onclick = async () => {
+  const conceptId = $('quizConcept').value.trim();
+  const r = await api('/api/quiz/generate', { conceptId });
+  if (r.error) { $('quizBox').innerHTML = `<div class="warn">${r.error}</div>`; return; }
+  quizData = r; quizSel = r.questions.map(()=>-1);
+  renderQuiz();
+};
+function renderQuiz() {
+  $('quizBox').innerHTML = quizData.questions.map((q,i) => `
+    <div class="quiz-q"><div>${i+1}. ${q.prompt}</div>
+      <div class="opts">${q.options.map((o,j)=>`<div class="opt" data-q="${i}" data-o="${j}">${o}</div>`).join('')}</div>
+    </div>`).join('') + `<button id="quizSubmit">Score quiz</button><div id="quizOut" class="log" style="margin-top:10px"></div>`;
+  $('quizBox').querySelectorAll('.opt').forEach(el => {
+    el.onclick = () => {
+      const qi = +el.dataset.q, oi = +el.dataset.o;
+      quizSel[qi] = oi;
+      el.parentElement.querySelectorAll('.opt').forEach(x=>x.classList.remove('sel'));
+      el.classList.add('sel');
+    };
+  });
+  $('quizSubmit').onclick = async () => {
+    const r = await api('/api/quiz/score', { conceptId: quizData.conceptId, answers: quizSel });
+    $('quizOut').textContent = `Score: ${r.correct}/${r.total}`;
+    r.perQuestion.forEach((p,i) => {
+      const opts = $('quizBox').querySelectorAll(`.quiz-q:nth-child(${i+1}) .opt`);
+      opts.forEach(o => o.classList.remove('ok','bad'));
+      if (p.correct) opts[quizSel[i]]?.classList.add('ok');
+      else { opts[quizSel[i]]?.classList.add('bad'); }
+    });
+  };
+}
+
 </script>
 </body>
 </html>

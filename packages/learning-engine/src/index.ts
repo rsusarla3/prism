@@ -7,3 +7,5 @@ export {
   mayRevealAnswer,
   updateMastery,
 } from './session.js';
+export { buildQuiz, scoreQuiz } from './quiz.js';
+export type { Quiz, QuizQuestion, QuizScore } from './quiz.js';

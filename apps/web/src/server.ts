@@ -38,6 +38,8 @@ import {
   recommendMode,
   buildHintLadder,
   nextHint,
+  buildQuiz,
+  scoreQuiz,
 } from 'prism-learning-engine';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -199,6 +201,21 @@ function handleSavePlan(body: SavePlanRequest) {
   return { ok: true as const };
 }
 
+// Quiz is generated from the approved curriculum (objectives/misconceptions),
+// never invented by a model — see packages/learning-engine/src/quiz.ts.
+function handleQuizGenerate(body: { conceptId: string; seed?: number }) {
+  const concept = CURRICULUM[body.conceptId];
+  if (!concept) throw Object.assign(new Error('Unknown concept'), { status: 404 });
+  return buildQuiz(concept, body.seed ?? Date.now());
+}
+
+function handleQuizScore(body: { conceptId: string; seed?: number; answers: number[] }) {
+  const concept = CURRICULUM[body.conceptId];
+  if (!concept) throw Object.assign(new Error('Unknown concept'), { status: 404 });
+  const quiz = buildQuiz(concept, body.seed ?? Date.now());
+  return scoreQuiz(quiz, body.answers);
+}
+
 // ---------------------------------------------------------------------------
 // Static demo UI
 // ---------------------------------------------------------------------------
@@ -246,6 +263,12 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'POST' && url.pathname === '/api/plan/save') {
       return send(res, 200, handleSavePlan(await readBody<SavePlanRequest>(req)));
+    }
+    if (req.method === 'POST' && url.pathname === '/api/quiz/generate') {
+      return send(res, 200, handleQuizGenerate(await readBody<{ conceptId: string; seed?: number }>(req)));
+    }
+    if (req.method === 'POST' && url.pathname === '/api/quiz/score') {
+      return send(res, 200, handleQuizScore(await readBody<{ conceptId: string; seed?: number; answers: number[] }>(req)));
     }
     send(res, 404, { error: 'Not found' });
   } catch (e) {
