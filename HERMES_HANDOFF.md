@@ -23,6 +23,9 @@ Two product surfaces: **Prism Core** (K-12, school — linear vs exponential gro
   open the local web app. Narrow permissions only (`sidePanel`, `storage`) — no
   content scripts, no history access, no monitoring.
 - All deterministic math covered by unit tests (see below).
+- **Reviewed & hardened (see `HERMES_REVIEW.md`):** server-side input validation
+  (HTTP 400 on empty/NaN/negative), client error + loading states, an inline SVG
+  growth graph, prediction-first reveal, and responsive/narrow-side-panel CSS.
 
 ## Project structure
 
@@ -85,7 +88,8 @@ npm run dev              # HOST=0.0.0.0 PORT=8787 node apps/web/dist/server.js
 
 ## Tests run
 
-`npm test` → **25 passed** (3 files):
+`npm test` → **28 passed** (4 files):
+- `packages/shared/src/num.test.ts` — 3 (input sanitization)
 - `packages/verifiers/src/verifiers.test.ts` — 9 (linear + compound finance)
 - `packages/verifiers/src/base.test.ts` — 8 (Prism Core growth + Prism Future invest + asset content)
 - `packages/learning-engine/src/engine.test.ts` — 8 (hints, mode rec, session, quiz)

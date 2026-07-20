@@ -28,7 +28,7 @@ import type {
   RevealAnswerResponse,
   SavePlanRequest,
 } from 'prism-shared';
-import { LEARNER_GOALS } from 'prism-shared';
+import { LEARNER_GOALS, parseFiniteAll } from 'prism-shared';
 import { CURRICULUM, classifyConcept } from 'prism-curriculum';
 import { solveLinear, verifyAttempt, compoundGrowth, compareGrowth, projectInvestment, verifyInvestmentGuess, ASSET_CLASSES, SUGGESTED_KEYWORDS } from 'prism-verifiers';
 import {
@@ -218,18 +218,20 @@ function handleQuizScore(body: { conceptId: string; seed?: number; answers: numb
 
 // --- Prism Core: linear vs exponential growth lesson ---
 function handleCoreGrowth(body: { start: number; linearIncrement: number; exponentialMultiplier: number; years: number; guess?: 'linear' | 'exponential' }) {
-  return compareGrowth(body, body.guess);
+  const vals = parseFiniteAll([body.start, body.linearIncrement, body.exponentialMultiplier, body.years]);
+  if (!vals) throw Object.assign(new Error('All fields must be valid numbers.'), { status: 400 });
+  const [start, linearIncrement, exponentialMultiplier, years] = vals;
+  if (years < 0 || exponentialMultiplier <= 0) throw Object.assign(new Error('Years must be ≥ 0 and multiplier > 0.'), { status: 400 });
+  return compareGrowth({ start, linearIncrement, exponentialMultiplier, years }, body.guess);
 }
 
 // --- Prism Future: investing projection + asset content ---
 function handleFutureInvest(body: { startingBalance: number; monthlyContribution: number; years: number; assumedReturnPct: number; feePct: number; guess?: number }) {
-  const profile = {
-    startingBalance: body.startingBalance,
-    monthlyContribution: body.monthlyContribution,
-    years: body.years,
-    assumedReturnPct: body.assumedReturnPct,
-    feePct: body.feePct,
-  };
+  const vals = parseFiniteAll([body.startingBalance, body.monthlyContribution, body.years, body.assumedReturnPct, body.feePct]);
+  if (!vals) throw Object.assign(new Error('All fields must be valid numbers.'), { status: 400 });
+  const [startingBalance, monthlyContribution, years, assumedReturnPct, feePct] = vals;
+  if (years < 0) throw Object.assign(new Error('Years must be ≥ 0.'), { status: 400 });
+  const profile = { startingBalance, monthlyContribution, years, assumedReturnPct, feePct };
   const projection = projectInvestment(profile);
   const check = body.guess !== undefined ? verifyInvestmentGuess(profile, body.guess) : null;
   return { projection, check };
