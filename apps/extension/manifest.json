@@ -2,19 +2,11 @@
   "manifest_version": 3,
   "name": "Prism",
   "version": "0.1.0",
-  "description": "Adaptive Chrome learning copilot. One concept. As many ways as it takes to make it click.",
-  "permissions": ["contextMenus", "sidePanel", "activeTab", "scripting", "storage"],
-  "host_permissions": ["http://localhost:8787/*", "http://*/*"],
+  "description": "Adaptive learning copilot: Prism Core (growth) and Prism Future (investing).",
+  "permissions": ["sidePanel", "storage"],
   "background": { "service_worker": "background.js", "type": "module" },
   "side_panel": { "default_path": "sidepanel.html" },
-  "action": { "default_title": "Open Prism", "default_popup": "sidepanel.html" },
-  "content_scripts": [
-    {
-      "matches": ["<all_urls>"],
-      "js": ["content.js"],
-      "run_at": "document_idle"
-    }
-  ],
+  "action": { "default_title": "Open Prism" },
   "icons": {
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",

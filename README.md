@@ -35,48 +35,59 @@ npm run build      # compile all packages
 npm test           # run verifier + learning-engine test suites (vitest)
 ```
 
-### Run the web app (demo UI on localhost)
+## What's inside
+
+A minimal working base with **two product surfaces**:
+
+- **Prism Core** (K-12, school) — a linear-vs-exponential growth lesson with adjustable
+  start, linear increment, and exponential multiplier; a comparison table; and one
+  prediction question.
+- **Prism Future** (adult) — future-goal onboarding (pick 3–5 keywords), manual investing
+  inputs, a deterministic compound-growth projection, basic ETF/stock/bond descriptions,
+  and a placeholder Future Snapshot card (image generation not implemented).
+
+A basic **Chrome MV3 extension** opens a side panel with buttons to launch each surface.
+
+## Run
 
 ```bash
-npm run build -w prism-web
-npm run dev              # binds 0.0.0.0 and prints your LAN URL
-# open http://localhost:8787
+npm install
+npm run build
+npm test                 # 25 deterministic tests
+npm run dev              # server on http://localhost:8787 (binds 0.0.0.0)
 ```
 
-`npm run dev` exposes the server on your network too. For **car / LAN use with
-the team**, share the `on your network` URL it prints — see
-[`docs/prism/LAN_SETUP.md`](docs/prism/LAN_SETUP.md). Teammates run the
-extension locally and point its **Backend host** field at the host laptop's
-hotspot IP; the browser UI just needs the host URL.
+Open http://localhost:8787. For the extension: `chrome://extensions` → Load unpacked →
+`apps/extension/`.
 
-The demo page exercises both P0 flows:
-- **School** — paste an equation, pick a goal, submit attempts. The final
-  answer + solution steps are **gated server-side** and only returned after a
-  meaningful attempt (try the API directly to confirm).
-- **Life** — compound-growth simulator with a fee-drag readout.
+## Branch discipline
+
+- `main`, `develop` — protected integration branches. Do **not** push here from feature work.
+- `hermes/base` — this minimal base. Feature branches (e.g. `codex/improvement`) branch off `develop`.
+- See `HERMES_HANDOFF.md` for the full base status, structure, and tests.
 
 ### Load the Chrome extension
 
-1. Build the web app and start it (`http://localhost:8787`).
+1. One-time: `npm install && npm run build`.
 2. Chrome → `chrome://extensions` → enable **Developer mode**.
 3. **Load unpacked** → select `apps/extension/`.
-4. Highlight text on any page → right-click **Learn with Prism** (or click the
-   toolbar icon). The side panel opens with the shared content.
+4. Click the Prism toolbar icon → the side panel opens with **Prism Core** and
+   **Prism Future** buttons that open the local web app at `http://localhost:8787`.
 
 ## Key design decisions
 
-- **Server-side answer gating** (AGENTS.md rule 4). The answer is never sent to
-  the client until the session records a meaningful attempt. See
-  `apps/web/src/server.ts` `handleReveal`.
-- **Deterministic verifiers.** Math/finance checks are pure functions with tests
-  (`packages/verifiers`); the LLM never performs arithmetic.
-- **Narrowest Chrome permissions.** The extension only acts on explicit user
-  selection; it never reads history or background-monitors pages.
-- **Provider-neutral finance.** A disabled `FinancialDataProvider` interface is
-  reserved for a future bank connection; V1 finance uses manual inputs only.
+- **Deterministic math.** Growth comparison and investment projection are pure,
+  tested functions in `packages/verifiers` (`growth.ts`, `invest.ts`).
+- **Narrowest Chrome permissions.** The MV3 extension uses only `sidePanel` and
+  `storage` — no content scripts, no history access, no page monitoring.
+- **No backend needed for the base.** The web app is a zero-dependency Node server;
+  state is in-memory (no database, no auth) per the minimal-base brief.
+- **Provider-neutral finance.** A `FinancialDataProvider` interface is reserved for a
+  future bank connection; V1 finance uses manual inputs only.
 
 ## Status
 
-P0 scaffold complete: shared types, verifiers (tested), curriculum, learning
-engine (tested), web server with enforced gating, and an MV3 extension skeleton.
-P1/P2 items (uploads, accounts, streaming, audio) are not yet built.
+Minimal base complete on `hermes/base`: two product surfaces (Core + Future), shared
+types, deterministic verifiers (tested), web server, and MV3 extension skeleton.
+Image generation (Future Snapshot), persistence, auth, and accounts are intentionally
+out of scope for this base.

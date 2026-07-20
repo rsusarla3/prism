@@ -30,7 +30,7 @@ import type {
 } from 'prism-shared';
 import { LEARNER_GOALS } from 'prism-shared';
 import { CURRICULUM, classifyConcept } from 'prism-curriculum';
-import { solveLinear, verifyAttempt, compoundGrowth } from 'prism-verifiers';
+import { solveLinear, verifyAttempt, compoundGrowth, compareGrowth, projectInvestment, verifyInvestmentGuess, ASSET_CLASSES, SUGGESTED_KEYWORDS } from 'prism-verifiers';
 import {
   createSession,
   recordAttempt,
@@ -216,6 +216,25 @@ function handleQuizScore(body: { conceptId: string; seed?: number; answers: numb
   return scoreQuiz(quiz, body.answers);
 }
 
+// --- Prism Core: linear vs exponential growth lesson ---
+function handleCoreGrowth(body: { start: number; linearIncrement: number; exponentialMultiplier: number; years: number; guess?: 'linear' | 'exponential' }) {
+  return compareGrowth(body, body.guess);
+}
+
+// --- Prism Future: investing projection + asset content ---
+function handleFutureInvest(body: { startingBalance: number; monthlyContribution: number; years: number; assumedReturnPct: number; feePct: number; guess?: number }) {
+  const profile = {
+    startingBalance: body.startingBalance,
+    monthlyContribution: body.monthlyContribution,
+    years: body.years,
+    assumedReturnPct: body.assumedReturnPct,
+    feePct: body.feePct,
+  };
+  const projection = projectInvestment(profile);
+  const check = body.guess !== undefined ? verifyInvestmentGuess(profile, body.guess) : null;
+  return { projection, check };
+}
+
 // ---------------------------------------------------------------------------
 // Static demo UI
 // ---------------------------------------------------------------------------
@@ -269,6 +288,15 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'POST' && url.pathname === '/api/quiz/score') {
       return send(res, 200, handleQuizScore(await readBody<{ conceptId: string; seed?: number; answers: number[] }>(req)));
+    }
+    if (req.method === 'POST' && url.pathname === '/api/core/growth') {
+      return send(res, 200, handleCoreGrowth(await readBody<{ start: number; linearIncrement: number; exponentialMultiplier: number; years: number; guess?: 'linear' | 'exponential' }>(req)));
+    }
+    if (req.method === 'POST' && url.pathname === '/api/future/invest') {
+      return send(res, 200, handleFutureInvest(await readBody<{ startingBalance: number; monthlyContribution: number; years: number; assumedReturnPct: number; feePct: number; guess?: number }>(req)));
+    }
+    if (req.method === 'GET' && url.pathname === '/api/future/content') {
+      return send(res, 200, { assetClasses: ASSET_CLASSES, suggestedKeywords: SUGGESTED_KEYWORDS });
     }
     send(res, 404, { error: 'Not found' });
   } catch (e) {
