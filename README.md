@@ -2,92 +2,99 @@
 
 **One concept. As many ways as it takes to make it click.**
 
-Prism is an adaptive Chrome learning copilot that understands the material a
-learner selects, asks what they are trying to accomplish, teaches the concept
-through interactive methods that change when the learner gets stuck, and only
-reveals a homework answer *after* the learner makes a meaningful attempt.
+Prism is an adaptive learning copilot with two focused experiences:
 
-Spec: [`docs/prism/PRISM_HACKATHON_BUILD_SPEC.md`](docs/prism/PRISM_HACKATHON_BUILD_SPEC.md)
-Agent rules: [`docs/prism/AGENTS.md`](docs/prism/AGENTS.md)
+- **Prism Core** teaches linear versus exponential growth through prediction, synchronized graphs and tables, diagnostics, transparent mode recommendations, and a transfer challenge.
+- **Prism Future** connects investing concepts to 3–5 user-selected life goals through deterministic projections, time and fee comparisons, asset tradeoffs, and an aspirational Future Snapshot prompt.
 
-## Monorepo layout
+The hackathon build is educational software, not an answer bot, brokerage calculator, or personalized investment adviser.
 
-```
-packages/shared        Canonical TypeScript domain types & API contracts (authoritative)
-packages/verifiers     Deterministic math + compound-interest logic (+ tests)
-packages/curriculum    Approved curriculum objects (linear eq, compound interest, ETF)
-packages/learning-engine  Session state machine, hint ladder, mode recommendation (+ tests)
-packages/api-client    Typed HTTP client
-apps/web               Zero-dep Node server + demo UI (server-side answer gating)
-apps/extension         MV3 Chrome extension (side panel + context menu + content script)
-```
+## Architecture
 
-## Prerequisites
-
-- Node.js 22+ (uses built-in `fetch`, `crypto.randomUUID`, ESM)
-- npm 10+
-
-## Develop
-
-```bash
-npm install
-npm run build      # compile all packages
-npm test           # run verifier + learning-engine test suites (vitest)
+```text
+Chrome side panel ── selected-text preview + goal choice
+        │
+        ▼
+Web experience ─── Prism Core / Prism Future
+        │
+        ├── shared contracts and provider boundaries
+        ├── approved curriculum and orchestration rules
+        └── deterministic math/finance verifiers
 ```
 
-## What's inside
+| Location | Responsibility |
+|---|---|
+| `apps/web` | Responsive learning UI and server routes |
+| `apps/extension` | Minimal-permission MV3 side panel and selection capture |
+| `packages/shared` | Authoritative contracts and provider interfaces |
+| `packages/verifiers` | Deterministic growth, investing, and algebra logic |
+| `packages/learning-engine` | Answer gate, hints, adaptations, and quizzes |
+| `packages/curriculum` | Approved concept objects |
+| `packages/api-client` | Typed client boundary |
 
-A minimal working base with **two product surfaces**:
+## Run locally
 
-- **Prism Core** (K-12, school) — a linear-vs-exponential growth lesson with adjustable
-  start, linear increment, and exponential multiplier; a comparison table; and one
-  prediction question.
-- **Prism Future** (adult) — future-goal onboarding (pick 3–5 keywords), manual investing
-  inputs, a deterministic compound-growth projection, basic ETF/stock/bond descriptions,
-  and a placeholder Future Snapshot card (image generation not implemented).
-
-A basic **Chrome MV3 extension** opens a side panel with buttons to launch each surface.
-
-## Run
+Requirements: Node.js 22+ and npm 10+.
 
 ```bash
 npm install
 npm run build
-npm test                 # 25 deterministic tests
-npm run dev              # server on http://localhost:8787 (binds 0.0.0.0)
+npm run dev
 ```
 
-Open http://localhost:8787. For the extension: `chrome://extensions` → Load unpacked →
-`apps/extension/`.
+Open [http://localhost:8787](http://localhost:8787). The server binds to `0.0.0.0` by default for same-hotspot demos; set `HOST=127.0.0.1` to keep it local.
 
-## Branch discipline
+## Load the Chrome extension
 
-- `main`, `develop` — protected integration branches. Do **not** push here from feature work.
-- `hermes/base` — this minimal base. Feature branches (e.g. `codex/improvement`) branch off `develop`.
-- See `HERMES_HANDOFF.md` for the full base status, structure, and tests.
+1. Open `chrome://extensions`.
+2. Enable **Developer mode**.
+3. Select **Load unpacked** and choose `apps/extension`.
+4. Highlight ordinary webpage text and choose **Learn this with Prism** from the context menu.
+5. Confirm the selection and choose a learning goal in the side panel.
 
-### Load the Chrome extension
+The extension requests only `sidePanel`, `storage`, `contextMenus`, and temporary `activeTab` access. It does not request browsing history or broad host access, monitor pages, or read other tabs.
 
-1. One-time: `npm install && npm run build`.
-2. Chrome → `chrome://extensions` → enable **Developer mode**.
-3. **Load unpacked** → select `apps/extension/`.
-4. Click the Prism toolbar icon → the side panel opens with **Prism Core** and
-   **Prism Future** buttons that open the local web app at `http://localhost:8787`.
+## Quality commands
 
-## Key design decisions
+```bash
+npm run lint       # TypeScript static checks
+npm run typecheck
+npm test
+npm run build
+```
 
-- **Deterministic math.** Growth comparison and investment projection are pure,
-  tested functions in `packages/verifiers` (`growth.ts`, `invest.ts`).
-- **Narrowest Chrome permissions.** The MV3 extension uses only `sidePanel` and
-  `storage` — no content scripts, no history access, no page monitoring.
-- **No backend needed for the base.** The web app is a zero-dependency Node server;
-  state is in-memory (no database, no auth) per the minimal-base brief.
-- **Provider-neutral finance.** A `FinancialDataProvider` interface is reserved for a
-  future bank connection; V1 finance uses manual inputs only.
+## Demo path
 
-## Status
+### Prism Core
 
-Minimal base complete on `hermes/base`: two product surfaces (Core + Future), shared
-types, deterministic verifiers (tested), web server, and MV3 extension skeleton.
-Image generation (Future Snapshot), persistence, auth, and accounts are intentionally
-out of scope for this base.
+1. Predict which growth model wins.
+2. Explore the synchronized graph, controls, and value table.
+3. Miss the diagnostic twice to trigger an explained table-mode recommendation.
+4. Complete the new-context transfer challenge.
+
+### Prism Future
+
+1. Choose 3–5 future goals or add a custom goal.
+2. Adjust manual contribution, horizon, return, and fee assumptions.
+3. Compare starting five years later and paying a higher fee.
+4. Review ETFs, individual stocks, and bonds.
+5. Generate the provider-ready Future Snapshot prompt.
+
+## Privacy and safety
+
+- Selected page content is treated as untrusted and shown before use.
+- Original homework answers remain server-gated until a meaningful attempt.
+- Financial data is manual and remains in memory for this demo.
+- No bank credentials, provider tokens, or model secrets are shipped to the extension.
+- Projections are illustrative, inflation-aware scenarios—not guarantees.
+- Image generation is represented by a server-only provider interface; V1 produces a prompt, not a misleading promised image.
+
+## Known limitations
+
+- In-memory sessions and plans reset with the server.
+- The extension hands the confirmed goal to the web experience but the full session UI runs in the web app.
+- Volatility, taxes, employer matches, and individualized suitability are intentionally excluded.
+- The algebra verifier supports a constrained linear-expression grammar.
+- Future Snapshot generation needs a configured server-side image provider.
+
+See [PRISM_HACKATHON_BUILD_SPEC.md](PRISM_HACKATHON_BUILD_SPEC.md), [AGENTS.md](AGENTS.md), and [CODEX_HANDOFF.md](CODEX_HANDOFF.md) for implementation details and next steps.

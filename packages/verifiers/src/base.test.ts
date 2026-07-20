@@ -43,6 +43,14 @@ describe('Prism Future — investment projection', () => {
     expect(r.balance).toBeGreaterThan(r.contributed); // growth positive
     expect(r.feeDrag).toBeGreaterThan(0); // fees cost something
     expect(r.growth).toBeCloseTo(r.balance - r.contributed, 1);
+    expect(r.series).toHaveLength(11);
+    expect(r.inflationAdjustedBalance).toBeLessThan(r.balance);
+    expect(r.estimatedMonthlyIncome).toBeGreaterThan(0);
+  });
+
+  it('rejects unsafe or nonsensical projection inputs', () => {
+    expect(() => projectInvestment({ startingBalance: -1, monthlyContribution: 100, years: 10, assumedReturnPct: 7, feePct: 0.5 })).toThrow();
+    expect(() => projectInvestment({ startingBalance: 0, monthlyContribution: 100, years: 100, assumedReturnPct: 7, feePct: 0.5 })).toThrow();
   });
 
   it('higher fee yields lower balance (fee drag is real)', () => {

@@ -30,7 +30,7 @@ import type {
 } from 'prism-shared';
 import { LEARNER_GOALS } from 'prism-shared';
 import { CURRICULUM, classifyConcept } from 'prism-curriculum';
-import { solveLinear, verifyAttempt, compoundGrowth, compareGrowth, projectInvestment, verifyInvestmentGuess, ASSET_CLASSES, SUGGESTED_KEYWORDS } from 'prism-verifiers';
+import { solveLinear, verifyAttempt, compoundGrowth, compareGrowth, projectInvestment, compareInvestmentScenarios, verifyInvestmentGuess, ASSET_CLASSES, SUGGESTED_KEYWORDS, FUTURE_GOALS } from 'prism-verifiers';
 import {
   createSession,
   recordAttempt,
@@ -229,10 +229,12 @@ function handleFutureInvest(body: { startingBalance: number; monthlyContribution
     years: body.years,
     assumedReturnPct: body.assumedReturnPct,
     feePct: body.feePct,
+    inflationPct: Number((body as { inflationPct?: number }).inflationPct ?? 2.5),
   };
   const projection = projectInvestment(profile);
+  const comparisons = compareInvestmentScenarios(profile);
   const check = body.guess !== undefined ? verifyInvestmentGuess(profile, body.guess) : null;
-  return { projection, check };
+  return { projection, comparisons, check };
 }
 
 // ---------------------------------------------------------------------------
@@ -244,7 +246,7 @@ async function serveStatic(res: http.ServerResponse, urlPath: string) {
   try {
     const buf = await readFile(path.join(PUBLIC_DIR, file));
     const ext = path.extname(file);
-    const ct = ext === '.html' ? 'text/html' : ext === '.js' ? 'text/javascript' : 'text/plain';
+    const ct = ext === '.html' ? 'text/html; charset=utf-8' : ext === '.js' ? 'text/javascript; charset=utf-8' : ext === '.css' ? 'text/css; charset=utf-8' : ext === '.svg' ? 'image/svg+xml' : 'text/plain';
     res.writeHead(200, { 'content-type': ct });
     res.end(buf);
   } catch {
@@ -296,7 +298,7 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, handleFutureInvest(await readBody<{ startingBalance: number; monthlyContribution: number; years: number; assumedReturnPct: number; feePct: number; guess?: number }>(req)));
     }
     if (req.method === 'GET' && url.pathname === '/api/future/content') {
-      return send(res, 200, { assetClasses: ASSET_CLASSES, suggestedKeywords: SUGGESTED_KEYWORDS });
+      return send(res, 200, { assetClasses: ASSET_CLASSES, suggestedKeywords: SUGGESTED_KEYWORDS, futureGoals: FUTURE_GOALS });
     }
     send(res, 404, { error: 'Not found' });
   } catch (e) {
