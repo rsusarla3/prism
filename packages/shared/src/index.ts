@@ -325,6 +325,17 @@ export interface InvestmentProfile {
   assumedReturnPct: number;
   /** Annual fee, percent (e.g. 0.5 = 0.5%). */
   feePct: number;
+  /** Optional inflation assumption for today's-dollar interpretation. */
+  inflationPct?: number;
+  /** Optional current age for start-now/start-later teaching comparisons. */
+  currentAge?: number;
+}
+
+export interface InvestmentPoint {
+  year: number;
+  balance: number;
+  contributed: number;
+  inflationAdjusted: number;
 }
 
 export interface InvestmentProjection {
@@ -332,6 +343,9 @@ export interface InvestmentProjection {
   contributed: number;
   growth: number;
   feeDrag: number;
+  inflationAdjustedBalance: number;
+  estimatedMonthlyIncome: number;
+  series: InvestmentPoint[];
 }
 
 /** Basic descriptions of the three asset classes the lesson introduces. */
@@ -347,8 +361,40 @@ export interface FutureSnapshot {
   keywords: FutureKeyword[];
   projection: InvestmentProjection;
   /** Placeholder flag: image generation is intentionally not implemented. */
-  imageGenerated: false;
+  imageGenerated: boolean;
   note: string;
+  prompt: string;
+  status: 'ready' | 'generating' | 'generated' | 'unavailable';
+  imageUrl?: string;
+}
+
+export type FutureGoalCategory = 'security' | 'freedom' | 'lifestyle' | 'family' | 'achievement';
+
+export interface FutureGoalOption {
+  id: string;
+  label: string;
+  category: FutureGoalCategory;
+}
+
+export interface ProjectionComparison {
+  baseline: InvestmentProjection;
+  startLater: InvestmentProjection;
+  higherFee: InvestmentProjection;
+}
+
+/** Server-only implementation boundary. No provider credentials belong in clients. */
+export interface ImageGenerationProvider {
+  readonly id: string;
+  readonly enabled: boolean;
+  generate(prompt: string): Promise<{ imageUrl: string }>;
+}
+
+export interface TutorTurn {
+  kind: 'diagnostic' | 'prediction' | 'feedback' | 'mode-recommendation' | 'challenge' | 'summary';
+  text: string;
+  expectedAction: 'choose' | 'submit' | 'manipulate' | 'continue' | 'none';
+  choices?: string[];
+  recommendation?: ModeRecommendation;
 }
 
 // ---------------------------------------------------------------------------

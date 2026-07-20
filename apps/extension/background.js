@@ -1,13 +1,4 @@
-/**
- * Prism MV3 background service worker (minimal base).
- *
- * Narrow permissions only (spec: request the narrowest Chrome permissions).
- * No history access, no content scripts, no page monitoring. The side panel
- * opens when the toolbar icon is clicked; it links to the local web app where
- * both product surfaces (Core + Future) run.
- */
-
-// Open the side panel when the toolbar icon is clicked.
-chrome.sidePanel
-  ?.setPanelBehavior?.({ openPanelOnActionClick: true })
-  .catch(() => {});
+const MENU='prism-learn-selection';
+chrome.runtime.onInstalled.addListener(()=>{chrome.contextMenus.removeAll(()=>chrome.contextMenus.create({id:MENU,title:'Learn this with Prism',contexts:['selection']}))});
+chrome.sidePanel?.setPanelBehavior?.({openPanelOnActionClick:true}).catch(()=>{});
+chrome.contextMenus.onClicked.addListener(async(info,tab)=>{if(info.menuItemId!==MENU)return;const restricted=!tab?.url||/^(chrome|edge|about|chrome-extension):/.test(tab.url);await chrome.storage.session.set({pendingContext:restricted?{error:'Prism cannot read this browser-protected page. Paste the non-sensitive concept instead.'}:{text:(info.selectionText||'').slice(0,4000),pageTitle:tab.title||'',pageUrl:tab.url||'',capturedAt:Date.now()}});if(tab?.windowId)try{await chrome.sidePanel.open({windowId:tab.windowId})}catch{}});
