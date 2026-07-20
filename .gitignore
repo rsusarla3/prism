@@ -216,3 +216,9 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Node / Prism monorepo
+node_modules/
+dist/
+*.tsbuildinfo
+.DS_Store
