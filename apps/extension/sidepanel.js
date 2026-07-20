@@ -17,6 +17,20 @@ let goal = 'solve';
 let sessionId = null;
 let selectedText = '';
 
+// --- Backend host setting (for LAN / car use: point each teammate's local
+// extension at the host laptop's hotspot IP). ---
+const $host = $('apiBase');
+const $hostStatus = $('hostStatus');
+chrome.storage.local.get('apiBase', (s) => {
+  if (s.apiBase) $host.value = s.apiBase;
+});
+$('saveHost').onclick = () => {
+  const v = $host.value.trim();
+  chrome.storage.local.set({ apiBase: v }, () => {
+    $hostStatus.textContent = `Host set to ${v}. The background worker reads this on the next request.`;
+  });
+};
+
 function log(msg, cls) {
   const d = document.createElement('div');
   if (cls) d.className = cls;

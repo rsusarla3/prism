@@ -7,7 +7,20 @@
  * Prism" (context menu) or clicks the toolbar action (side panel).
  */
 
-const API_BASE = 'http://localhost:8787';
+// Backend host. Defaults to the host laptop at localhost; on a teammate's
+// machine, set this to the host's hotspot IP, e.g. http://172.20.10.2:8787
+// (see docs/prism/LAN_SETUP.md). Resolved live from storage on each call so it
+// can be changed without reloading the worker.
+const DEFAULT_API_BASE = 'http://localhost:8787';
+
+async function getApiBase() {
+  try {
+    const s = await chrome.storage.local.get('apiBase');
+    return s.apiBase || DEFAULT_API_BASE;
+  } catch {
+    return DEFAULT_API_BASE;
+  }
+}
 
 // Open the side panel when the toolbar icon is clicked.
 chrome.sidePanel
@@ -40,14 +53,23 @@ function broadcast(msg) {
 // Proxy API calls from the side panel (keeps fetch in the SW, not content page).
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg?.type === 'api') {
-    fetch(`${API_BASE}${msg.path}`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(msg.body ?? {}),
-    })
-      .then((r) => r.json())
-      .then((data) => sendResponse({ ok: true, data }))
-      .catch((e) => sendResponse({ ok: false, error: String(e) }));
+    getApiBase().then((base) => {
+      fetch(`${base}${msg.path}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(msg.body ?? {}),
+      })
+        .then((r) => r.json())
+        .then((data) => sendResponse({ ok: true, data }))
+        .catch((e) => sendResponse({ ok: false, error: String(e) }));
+    });
     return true; // keep the message channel open for async response
+  }
+  // Content script forwards a highlight; open the panel and share the text.
+  if (msg?.type === 'learn-selection' && msg.text) {
+    chrome.sidePanel?.open?.({}).catch(() => {});
+    chrome.storage.session.set({ pendingSelection: msg.text, surface: 'school' });
+    broadcast({ type: 'selection', text: msg.text });
+    return false;
   }
 });
