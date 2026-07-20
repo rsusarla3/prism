@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Prism — demo</title>
+<style>
+  :root { --bg:#0f1220; --card:#1a1f35; --ink:#e8ebff; --muted:#9aa3c7; --accent:#7c5cff; --ok:#37d39b; --warn:#ffb454; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:15px/1.5 system-ui,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--ink); }
+  header { padding:18px 22px; border-bottom:1px solid #2a3052; display:flex; align-items:baseline; gap:12px; }
+  header h1 { margin:0; font-size:20px; letter-spacing:.3px; }
+  header span { color:var(--muted); }
+  main { max-width:900px; margin:0 auto; padding:22px; display:grid; gap:18px; }
+  .card { background:var(--card); border:1px solid #2a3052; border-radius:14px; padding:18px; }
+  h2 { margin:0 0 10px; font-size:16px; }
+  label { display:block; color:var(--muted); margin:10px 0 4px; }
+  textarea, input { width:100%; background:#0e1226; color:var(--ink); border:1px solid #2e355c; border-radius:9px; padding:9px 11px; font:inherit; }
+  textarea { min-height:64px; resize:vertical; }
+  .row { display:flex; gap:10px; flex-wrap:wrap; }
+  button { cursor:pointer; border:0; border-radius:9px; padding:9px 14px; font:inherit; font-weight:600; background:var(--accent); color:#fff; }
+  button.ghost { background:#2a3052; color:var(--ink); }
+  button:disabled { opacity:.45; cursor:not-allowed; }
+  .goals { display:flex; gap:8px; flex-wrap:wrap; }
+  .goal { background:#2a3052; border:1px solid #363d68; border-radius:999px; padding:6px 12px; cursor:pointer; }
+  .goal.active { background:var(--accent); border-color:var(--accent); }
+  .log { white-space:pre-wrap; font-size:13px; color:var(--muted); max-height:240px; overflow:auto; }
+  .ok { color:var(--ok); } .warn { color:var(--warn); }
+  .pill { display:inline-block; background:#232a4d; color:var(--muted); border-radius:999px; padding:3px 10px; font-size:12px; margin-left:6px; }
+  details { margin-top:8px; } summary { cursor:pointer; color:var(--muted); }
+</style>
+</head>
+<body>
+<header><h1>Prism</h1><span>One concept. As many ways as it takes to make it click.</span></header>
+<main>
+  <section class="card">
+    <h2>School — Homework Companion <span class="pill">answer gated server-side</span></h2>
+    <label>Highlighted problem (e.g. “Solve 2x + 3 = x + 5”)</label>
+    <textarea id="problem">Solve 2x + 3 = x + 5</textarea>
+    <label>What do you want to do?</label>
+    <div class="goals" id="goals"></div>
+    <div class="row" style="margin-top:14px">
+      <button id="start">Start session</button>
+    </div>
+    <div id="schoolArea" style="display:none; margin-top:14px">
+      <label>Your attempt</label>
+      <input id="attempt" placeholder="e.g. x = 2  (or a step / explanation)" />
+      <div class="row" style="margin-top:10px">
+        <button id="submit">Submit attempt</button>
+        <button id="reveal" class="ghost" disabled>Show full solution</button>
+      </div>
+      <div id="modeRec"></div>
+    </div>
+    <div id="schoolLog" class="log" style="margin-top:12px"></div>
+  </section>
+
+  <section class="card">
+    <h2>Life — Compound Growth Simulator <span class="pill">educational only</span></h2>
+    <div class="row">
+      <div style="flex:1;min-width:140px"><label>Initial $</label><input id="p0" type="number" value="1000" /></div>
+      <div style="flex:1;min-width:140px"><label>Annual $</label><input id="c" type="number" value="100" /></div>
+      <div style="flex:1;min-width:140px"><label>Return %</label><input id="r" type="number" value="7" /></div>
+      <div style="flex:1;min-width:140px"><label>Years</label><input id="y" type="number" value="10" /></div>
+      <div style="flex:1;min-width:140px"><label>Fee %</label><input id="f" type="number" value="0.5" /></div>
+    </div>
+    <button id="sim" style="margin-top:12px">Simulate</button>
+    <div id="simOut" class="log" style="margin-top:10px"></div>
+  </section>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let sessionId = null;
+let goal = 'solve';
+const GOALS = [['explain','Explain this'],['solve','Help me solve it'],['check','Check my work'],['quiz','Quiz me'],['summarize','Summarize it'],['prerequisite','Teach prerequisite']];
+
+function renderGoals() {
+  $('goals').innerHTML = '';
+  GOALS.forEach(([k,label]) => {
+    const el = document.createElement('div');
+    el.className = 'goal' + (k===goal?' active':'');
+    el.textContent = label;
+    el.onclick = () => { goal = k; renderGoals(); };
+    $('goals').appendChild(el);
+  });
+}
+renderGoals();
+
+function log(box, msg, cls) {
+  const div = document.createElement('div');
+  if (cls) div.className = cls;
+  div.textContent = msg;
+  $(box).appendChild(div);
+  $(box).scrollTop = $(box).scrollHeight;
+}
+
+async function api(path, body) {
+  const res = await fetch(path, { method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify(body) });
+  return res.json();
+}
+
+$('start').onclick = async () => {
+  const text = $('problem').value;
+  const r = await api('/api/session/start', { surface:'school', selectedText:text, inputType:'text-selection' });
+  sessionId = r.sessionId;
+  $('schoolArea').style.display = 'block';
+  $('schoolLog').innerHTML = '';
+  const c = r.classification;
+  log('schoolLog', `Classified → ${c.surface} / ${c.domain} / ${c.conceptId || 'unknown'}${c.isHomework?' (homework)':''}`);
+  log('schoolLog', `Goals offered: ${r.goalOptions.join(', ')}`);
+  log('schoolLog', `Goal selected: ${goal}`);
+};
+
+$('submit').onclick = async () => {
+  if (!sessionId) return;
+  const val = $('attempt').value;
+  const r = await api('/api/session/attempt', { sessionId, kind:'equation-step', value:val });
+  const v = r.verification;
+  log('schoolLog', `Attempt "${val}" → ${v.correct?'CORRECT':'incorrect'}: ${v.reason}`, v.correct?'ok':'warn');
+  if (r.nextHint) log('schoolLog', `Hint (lvl ${r.nextHint.level}): ${r.nextHint.text}`);
+  $('reveal').disabled = !r.answerUnlocked;
+  if (r.answerUnlocked) log('schoolLog', '✔ Answer unlocked — you may reveal the solution.');
+  if (r.recommendation) {
+    const rec = r.recommendation;
+    $('modeRec').innerHTML = `<div class="card" style="margin-top:10px"><b>Switch method?</b><br>${rec.observedReason}<br><i>${rec.proposedMethod}</i> — ${rec.expectedBenefit}<br><button class="ghost">Switch</button> <button class="ghost">Stay here</button></div>`;
+  }
+};
+
+$('reveal').onclick = async () => {
+  const r = await api('/api/session/reveal', { sessionId });
+  if (r.error) { log('schoolLog', r.error, 'warn'); return; }
+  log('schoolLog', `Final answer: ${r.finalAnswer}`, 'ok');
+  log('schoolLog', 'Solution steps:\n' + (r.fullSolution||[]).join('\n'));
+};
+
+$('sim').onclick = async () => {
+  const profile = { initialPrincipal:+$('p0').value, annualContribution:+$('c').value, annualReturnPct:+$('r').value, years:+$('y').value, feePct:+$('f').value };
+  const r = await api('/api/life/simulate', { sessionId: sessionId||'demo', profile });
+  $('simOut').innerHTML = `Balance: $${r.balance.toLocaleString()}\nContributed: $${r.contributed.toLocaleString()}\nGrowth: $${r.growth.toLocaleString()}\nFee drag: $${r.feeDrag.toLocaleString()}  (vs 0% fee)`;
+};
+</script>
+</body>
+</html>

@@ -1,0 +1,17 @@
+{
+  "name": "prism-web",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "main": "./dist/server.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/server.js"
+  },
+  "dependencies": {
+    "prism-shared": "^0.1.0",
+    "prism-verifiers": "^0.1.0",
+    "prism-curriculum": "^0.1.0",
+    "prism-learning-engine": "^0.1.0"
+  }
+}

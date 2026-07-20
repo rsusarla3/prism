@@ -4,10 +4,12 @@
  * use; this module routes deterministically.
  */
 
-import type { CurriculumConcept, VerificationResult, Attempt, FinancialProfile } from 'prism-shared';
+export { parseLinear, solveLinear, verifyLinearSolution } from './linear.js';
+export { compoundGrowth, verifyCompoundGuess, round2 } from './finance.js';
+
 import { verifyLinearSolution } from './linear.js';
 import { verifyCompoundGuess } from './finance.js';
-
+import type { CurriculumConcept, VerificationResult, Attempt, FinancialProfile } from 'prism-shared';
 /**
  * Verify a learner attempt against the concept's canonical answer.
  * `context` carries the data the verifier needs (equation sides, finance profile).

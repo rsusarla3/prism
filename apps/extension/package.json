@@ -1,0 +1,7 @@
+{
+  "name": "prism-extension",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Prism MV3 Chrome extension (side panel + context menu)."
+}
