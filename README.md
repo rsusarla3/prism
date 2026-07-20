@@ -39,9 +39,15 @@ npm test           # run verifier + learning-engine test suites (vitest)
 
 ```bash
 npm run build -w prism-web
-node apps/web/dist/server.js          # or: npm run dev:web (port 8787)
+npm run dev              # binds 0.0.0.0 and prints your LAN URL
 # open http://localhost:8787
 ```
+
+`npm run dev` exposes the server on your network too. For **car / LAN use with
+the team**, share the `on your network` URL it prints — see
+[`docs/prism/LAN_SETUP.md`](docs/prism/LAN_SETUP.md). Teammates run the
+extension locally and point its **Backend host** field at the host laptop's
+hotspot IP; the browser UI just needs the host URL.
 
 The demo page exercises both P0 flows:
 - **School** — paste an equation, pick a goal, submit attempts. The final

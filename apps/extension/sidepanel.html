@@ -27,6 +27,11 @@
 <body>
 <header><h1>Prism</h1><span id="sub">Highlight text on the page, then right-click → Learn with Prism</span></header>
 <div class="pad">
+  <div class="card"><label>Backend host (host laptop's hotspot IP)</label>
+    <input id="apiBase" placeholder="http://localhost:8787" />
+    <button id="saveHost" class="ghost" style="margin-top:8px">Save host</button>
+    <div id="hostStatus" class="log" style="margin-top:6px"></div>
+  </div>
   <div class="card"><label>Shared content</label><div class="selected" id="shared">— nothing selected —</div></div>
   <div id="flow" style="display:none">
     <div class="card">

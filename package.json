@@ -10,7 +10,7 @@
   "scripts": {
     "build": "npm run build -w prism-shared && npm run build -w prism-verifiers && npm run build -w prism-curriculum && npm run build -w prism-learning-engine && npm run build -w prism-api-client",
     "test": "npm run build && vitest run",
-    "dev:web": "node apps/web/server.js"
+    "dev": "HOST=0.0.0.0 PORT=8787 node apps/web/dist/server.js"
   },
   "devDependencies": {
     "@types/node": "^22.5.0",

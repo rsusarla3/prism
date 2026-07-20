@@ -14,6 +14,7 @@ import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
+import os from 'node:os';
 
 import type {
   Session,
@@ -42,6 +43,9 @@ import {
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 const PORT = Number(process.env.PORT) || 8787;
+// Bind 0.0.0.0 by default so other devices on the same hotspot/LAN can reach
+// the host. Set HOST=127.0.0.1 to restrict to the host machine only.
+const HOST = process.env.HOST || '0.0.0.0';
 
 interface StoredSession extends Session {
   lhs?: string;
@@ -250,6 +254,17 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, () => {
-  console.log(`Prism web server on http://localhost:${PORT}`);
+server.listen(PORT, HOST, () => {
+  const lanUrls: string[] = [];
+  for (const addrs of Object.values(os.networkInterfaces())) {
+    for (const a of addrs ?? []) {
+      if (a.family === 'IPv4' && !a.internal) lanUrls.push(`http://${a.address}:${PORT}`);
+    }
+  }
+  console.log(`Prism web server running`);
+  console.log(`  local:            http://localhost:${PORT}`);
+  if (lanUrls.length) {
+    console.log(`  on your network:  ${lanUrls.join('\n                    ')}`);
+    console.log('  → share a network URL with teammates on the same hotspot.');
+  }
 });
