@@ -350,3 +350,9 @@ export interface FutureSnapshot {
   imageGenerated: false;
   note: string;
 }
+
+// ---------------------------------------------------------------------------
+// Input sanitization (shared, deterministic)
+// ---------------------------------------------------------------------------
+
+export { parseFinite, parseFiniteAll } from './num.js';
