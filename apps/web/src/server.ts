@@ -5,9 +5,8 @@
  *   - Prism Core  (K-12, school): linear vs exponential growth lesson
  *   - Prism Future (adult): investing projection + future snapshot
  *
- * Also serves the demo UI from /public so the product is visible on
- * localhost without the Chrome extension. Deterministic, educational math
- * only — no auth, no DB, no real bank connections (spec: minimal base).
+ * Deterministic, educational math only — no auth, no DB, no real bank
+ * connections (spec: minimal base).
  */
 
 import http from 'node:http';
@@ -20,9 +19,11 @@ import { parseFiniteAll } from 'prism-shared';
 import {
   compareGrowth,
   projectInvestment,
+  compareInvestmentScenarios,
   verifyInvestmentGuess,
   ASSET_CLASSES,
   SUGGESTED_KEYWORDS,
+  FUTURE_GOALS,
 } from 'prism-verifiers';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -70,16 +71,17 @@ function handleCoreGrowth(body: { start: number; linearIncrement: number; expone
   return compareGrowth({ start, linearIncrement, exponentialMultiplier, years }, body.guess);
 }
 
-// --- Prism Future: investing projection + asset content ---
-function handleFutureInvest(body: { startingBalance: number; monthlyContribution: number; years: number; assumedReturnPct: number; feePct: number; guess?: number }) {
-  const vals = parseFiniteAll([body.startingBalance, body.monthlyContribution, body.years, body.assumedReturnPct, body.feePct]);
-  if (!vals) throw Object.assign(new Error('All fields must be valid numbers.'), { status: 400 });
-  const [startingBalance, monthlyContribution, years, assumedReturnPct, feePct] = vals;
+// --- Prism Future: investing projection + scenarios + asset content ---
+function handleFutureInvest(body: { startingBalance: number; monthlyContribution: number; years: number; assumedReturnPct: number; feePct: number; inflationPct?: number; guess?: number }) {
+  const vals = parseFiniteAll([body.startingBalance, body.monthlyContribution, body.years, body.assumedReturnPct, body.feePct, body.inflationPct ?? 2.5]);
+  if (!vals) throw Object.assign(new Error('All projection inputs must be finite numbers.'), { status: 400 });
+  const [startingBalance, monthlyContribution, years, assumedReturnPct, feePct, inflationPct] = vals;
   if (years < 0) throw Object.assign(new Error('Years must be ≥ 0.'), { status: 400 });
-  const profile = { startingBalance, monthlyContribution, years, assumedReturnPct, feePct };
+  const profile = { startingBalance, monthlyContribution, years, assumedReturnPct, feePct, inflationPct };
   const projection = projectInvestment(profile);
+  const comparisons = compareInvestmentScenarios(profile);
   const check = body.guess !== undefined ? verifyInvestmentGuess(profile, body.guess) : null;
-  return { projection, check };
+  return { projection, comparisons, check };
 }
 
 // ---------------------------------------------------------------------------
@@ -91,7 +93,11 @@ async function serveStatic(res: http.ServerResponse, urlPath: string) {
   try {
     const buf = await readFile(path.join(PUBLIC_DIR, file));
     const ext = path.extname(file);
-    const ct = ext === '.html' ? 'text/html' : ext === '.js' ? 'text/javascript' : 'text/plain';
+    const ct = ext === '.html' ? 'text/html; charset=utf-8'
+      : ext === '.js' ? 'text/javascript; charset=utf-8'
+      : ext === '.css' ? 'text/css; charset=utf-8'
+      : ext === '.svg' ? 'image/svg+xml'
+      : 'text/plain';
     res.writeHead(200, { 'content-type': ct });
     res.end(buf);
   } catch {
@@ -119,10 +125,10 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, handleCoreGrowth(await readBody<{ start: number; linearIncrement: number; exponentialMultiplier: number; years: number; guess?: 'linear' | 'exponential' }>(req)));
     }
     if (req.method === 'POST' && url.pathname === '/api/future/invest') {
-      return send(res, 200, handleFutureInvest(await readBody<{ startingBalance: number; monthlyContribution: number; years: number; assumedReturnPct: number; feePct: number; guess?: number }>(req)));
+      return send(res, 200, handleFutureInvest(await readBody<{ startingBalance: number; monthlyContribution: number; years: number; assumedReturnPct: number; feePct: number; inflationPct?: number; guess?: number }>(req)));
     }
     if (req.method === 'GET' && url.pathname === '/api/future/content') {
-      return send(res, 200, { assetClasses: ASSET_CLASSES, suggestedKeywords: SUGGESTED_KEYWORDS });
+      return send(res, 200, { assetClasses: ASSET_CLASSES, suggestedKeywords: SUGGESTED_KEYWORDS, futureGoals: FUTURE_GOALS });
     }
     send(res, 404, { error: 'Not found' });
   } catch (e) {

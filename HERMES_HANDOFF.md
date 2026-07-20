@@ -15,7 +15,10 @@ Two product surfaces: **Prism Core** (K-12, school — linear vs exponential gro
 - **Prism Future** (`/api/future/invest`, `/api/future/content`):
   - Future-goal **onboarding**: pick 3–5 suggested keywords or add custom.
   - Manual inputs: starting balance, monthly contribution, years, assumed return, fee.
-  - Deterministic **compound-growth** projection (balance, contributed, growth, fee drag).
+  - Deterministic **closed-form compound-growth** projection (lump sum + monthly
+    annuity FV, net of fees) plus inflation-adjusted balance and estimated monthly
+    income. Adds comparison scenarios (startLater, higherFee) so learners see the
+    effect of time and fees (spec §545).
   - Basic descriptions of **ETFs, individual stocks, and bonds**.
   - Balance-guess check against projection (1% tolerance).
   - **Future Snapshot card** placeholder (image generation intentionally NOT implemented).
@@ -23,9 +26,16 @@ Two product surfaces: **Prism Core** (K-12, school — linear vs exponential gro
   open the local web app. Narrow permissions only (`sidePanel`, `storage`) — no
   content scripts, no history access, no monitoring.
 - All deterministic math covered by unit tests (see below).
+- **Server is strictly two-product** (`/api/core/growth`, `/api/future/invest`,
+  `/api/future/content`, `/api/health`). Legacy routes from the prior vision
+  (`/api/session/*`, `/api/life/simulate`, `/api/plan/save`, `/api/quiz/*`) were
+  deliberately removed — the base is the minimal two-product surface.
 - **Reviewed & hardened (see `HERMES_REVIEW.md`):** server-side input validation
   (HTTP 400 on empty/NaN/negative), client error + loading states, an inline SVG
   growth graph, prediction-first reveal, and responsive/narrow-side-panel CSS.
+- **Merged Codex improvements:** closed-form investment math + comparison scenarios
+  (improvement #1 from `CODEX_BRIEF.md`) were merged from `codex/improvement` into
+  `hermes/base`, with legacy routes re-stripped and input-sanitization tests restored.
 
 ## Project structure
 
@@ -88,10 +98,10 @@ npm run dev              # HOST=0.0.0.0 PORT=8787 node apps/web/dist/server.js
 
 ## Tests run
 
-`npm test` → **28 passed** (4 files):
+`npm test` → **31 passed** (4 files):
 - `packages/shared/src/num.test.ts` — 3 (input sanitization)
 - `packages/verifiers/src/verifiers.test.ts` — 9 (linear + compound finance)
-- `packages/verifiers/src/base.test.ts` — 8 (Prism Core growth + Prism Future invest + asset content)
+- `packages/verifiers/src/base.test.ts` — 11 (Prism Core growth + Prism Future invest + scenarios + asset content)
 - `packages/learning-engine/src/engine.test.ts` — 8 (hints, mode rec, session, quiz)
 
 All deterministic calculations (growth comparison, investment projection, fee drag,

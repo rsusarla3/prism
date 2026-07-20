@@ -1,65 +1,74 @@
-# CODEX_HANDOFF.md
+# Codex improvement handoff
 
-Handoff for the **`codex/improvement`** branch, which branches from `develop` and
-currently tracks `hermes/base` after the base merge. This file documents the state
-of the codebase as reviewed and the gaps found/fixed during the Hermes review pass.
+Implementation commit: `139659031e757acdc2a71264b3d6d154fedb2e30`
 
-## Context
+Branch: `codex/improvement`
 
-The minimal working base (`hermes/base`) implements two product surfaces:
-- **Prism Core** (K-12): linear-vs-exponential growth lesson.
-- **Prism Future** (adult): investing projection + Future Snapshot placeholder.
+## Architectural improvements
 
-A Chrome MV3 extension opens a side panel with two buttons linking to the local web app.
+- Preserved the monorepo boundaries and made the root build include the web server.
+- Expanded authoritative shared contracts for time-series projections, inflation-aware outputs, Future Snapshot state, categorized goals, tutor turns, and a server-only image-provider boundary.
+- Kept investing calculations deterministic and added validation, annual series, today-dollar interpretation, fee drag, start-later comparison, and a cautious 4% teaching illustration.
+- Removed pre-gate answer leakage from incorrect algebra and finance verifier feedback.
+- Kept bank and image generation provider-neutral; neither provider is enabled or imported into the extension.
+- Restored explicit selected-text capture in the MV3 extension using session storage and only `sidePanel`, `storage`, `contextMenus`, and temporary `activeTab` permissions.
 
-## Review findings (see HERMES_REVIEW.md for the full list)
+## User-visible improvements
 
-Issues found and fixed on `hermes/base` (then merged into `codex/improvement`):
-- Silent `NaN`/`0` when numeric inputs were empty → added server-side validation
-  (`parseFiniteAll`) returning HTTP 400, plus client-side error states.
-- No loading / empty / error states in the UI → added loading + error banners.
-- Spec §545 requires a **graph** and prediction-before-reveal → added an inline SVG
-  line chart and made "Check prediction" reveal the comparison after the learner commits.
-- No responsive/narrow-side-panel CSS → added `overflow-x:auto` graph wrapper +
-  `@media (max-width:520px)` rules.
-- Stale dev server served an old build → fixed by clean rebuild; noted that the root
-  `npm run build` does **not** build `prism-web`, so `npm run build -w prism-web`
-  (or `npm run dev`) is required after editing `apps/web`.
+### Prism Core
 
-## Known limitations (carried from base)
+- Prediction before explanation.
+- Interactive SVG graph synchronized with adjustable parameters and a value table.
+- Clear repeated-addition versus repeated-multiplication representations.
+- Diagnostic question with targeted feedback.
+- Rule-based alternative-mode recommendation after repeated mistakes, including observation, proposed method, expected benefit, and user choice.
+- Transfer challenge in a new social-growth context.
+- Responsive, keyboard-accessible presentation with reduced-motion support.
 
-- Investment math is a monthly-iteration approximation (educational, not a brokerage calc).
-- No persistence (in-memory only).
-- Extension side panel only *links* to the web app.
-- Future Snapshot is a static placeholder (no image generation — out of scope).
-- Leftover legacy routes from the prior vision remain in `apps/web`
-  (`/api/session/*`, `/api/life/simulate`, `/api/quiz/*`). Decide whether to keep or remove.
+### Prism Future
 
-## Suggested next improvements for this branch
+- Categorized future-goal onboarding requiring 3–5 suggested or custom goals.
+- Interactive contribution, horizon, return, and fee controls.
+- Contributions versus projected growth visualization.
+- Inflation-adjusted output, fee drag, start-five-years-later comparison, and higher-fee comparison returned by the API.
+- Responsible explanations of ETFs, individual stocks, bonds, diversification, uncertainty, and account-versus-investment distinctions.
+- Lifestyle translation with explicit illustrative-language safeguards.
+- Provider-ready Future Snapshot prompt and schema; image generation remains safely disabled until configured server-side.
 
-1. Remove or clearly separate the legacy routes so the base is purely two-product.
-2. Persist Future Snapshot / plans (the `/api/plan/save` route exists but is in-memory).
-3. Add a unit test that exercises the HTTP 400 path through the server (currently only
-   the `parseFinite` helper is unit-tested; the handler wiring is verified via curl).
-4. Consider a real closed-form compound-interest formula and reconcile with the approximation.
-5. Wire the extension side panel to call the backend directly instead of opening a tab.
+### Chrome extension
 
-## Tests
+- Selected-text context menu.
+- Exact context preview and disclosure of what will be shared.
+- Goal selection before opening the lesson.
+- Restricted-page fallback and manual-topic alternative.
+- No history access, broad host permissions, continuous monitoring, or embedded secrets.
 
-`npm test` → **28 passed** (4 files):
-- `packages/shared/src/num.test.ts` — 3 (input sanitization)
-- `packages/verifiers/src/verifiers.test.ts` — 9
-- `packages/verifiers/src/base.test.ts` — 8
-- `packages/learning-engine/src/engine.test.ts` — 8
+## Verification results
 
-## Commands
+- `node --check` for the web UI, extension background worker, and side panel: passed.
+- `npm run lint`: passed (TypeScript static checks).
+- `npm run typecheck`: passed.
+- `npm run build`: passed for all packages and `prism-web`.
+- Live server/API smoke tests: passed for `/`, `/api/health`, `/api/core/growth`, and `/api/future/invest`.
+- `git diff --check`: passed.
+- Secret-pattern review: no exposed values; only empty environment-variable names in the specification.
+- `npm test`: compilation passes, but Vitest 2.1.9 hangs before collecting tests in this Codex execution environment, including with a single worker. The process was terminated rather than reported as passing. Hermes reported 25 passing tests before this pass; two new finance validation/series cases were added but require rerunning in a normal local terminal or CI.
+- `npm install` reports five development-dependency audit findings (three moderate, one high, one critical). Review and upgrade the test toolchain separately; the shipped demo has no external runtime dependency.
 
-```bash
-npm install
-npm run build            # builds packages (NOT prism-web)
-npm run build -w prism-web   # required after editing apps/web
-npm test
-npm run dev              # HOST=0.0.0.0 PORT=8787 node apps/web/dist/server.js
-```
+## Known limitations
 
-Branch discipline: do not push to `main` or `develop` from feature work; PR into `develop`.
+- Session and saved-plan persistence remains in memory.
+- The extension captures and confirms context, but the complete learning interaction runs in the web app.
+- The Core UI specializes in linear versus exponential growth; the legacy server-gated linear-equation routes remain available but are not the showcased flow.
+- The simulator intentionally omits volatility paths, taxes, employer matching, and personalized suitability.
+- Future Snapshot currently produces a safe prompt, not an image; a server-side provider and explicit user consent are required.
+- Automated browser end-to-end coverage is still needed.
+
+## Recommended next tasks
+
+1. Run `npm test` in GitHub Actions or a teammate’s terminal and resolve the local Vitest worker hang.
+2. Add HTTP integration tests around answer gating and projection input validation.
+3. Pass the confirmed extension context and goal into a newly created server session rather than only opening the Core route.
+4. Add durable anonymous-session persistence before authentication.
+5. Configure an image-generation adapter behind the existing server-only boundary and add consent, retention, and failure states.
+6. Conduct a keyboard/screen-reader audit and test the unpacked extension on Chrome protected and ordinary pages.

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { compareGrowth, verifyGrowthPrediction } from './growth.js';
-import { projectInvestment, verifyInvestmentGuess } from './invest.js';
+import { futureValueWithContributions, projectInvestment, verifyInvestmentGuess } from './invest.js';
 import { ASSET_CLASSES, SUGGESTED_KEYWORDS } from './index.js';
 
 describe('Prism Core — linear vs exponential growth', () => {
@@ -31,6 +31,36 @@ describe('Prism Core — linear vs exponential growth', () => {
 });
 
 describe('Prism Future — investment projection', () => {
+  it('matches the textbook lump-sum plus ordinary-annuity FV formula', () => {
+    const principal = 1_000;
+    const payment = 100;
+    const monthlyRate = 0.06 / 12;
+    const months = 10 * 12;
+    const factor = Math.pow(1 + monthlyRate, months);
+    const textbook = principal * factor + payment * ((factor - 1) / monthlyRate);
+
+    expect(futureValueWithContributions(principal, payment, monthlyRate, months))
+      .toBeCloseTo(textbook, 10);
+    expect(projectInvestment({
+      startingBalance: principal,
+      monthlyContribution: payment,
+      years: 10,
+      assumedReturnPct: 6,
+      feePct: 0,
+    }).balance).toBeCloseTo(textbook, 2);
+  });
+
+  it('handles a zero net rate without dividing by zero', () => {
+    expect(futureValueWithContributions(500, 25, 0, 24)).toBe(1_100);
+    expect(projectInvestment({
+      startingBalance: 500,
+      monthlyContribution: 25,
+      years: 2,
+      assumedReturnPct: 1,
+      feePct: 1,
+    }).balance).toBe(1_100);
+  });
+
   it('projects balance, contributions, growth, and fee drag', () => {
     const r = projectInvestment({
       startingBalance: 1000,
@@ -43,6 +73,14 @@ describe('Prism Future — investment projection', () => {
     expect(r.balance).toBeGreaterThan(r.contributed); // growth positive
     expect(r.feeDrag).toBeGreaterThan(0); // fees cost something
     expect(r.growth).toBeCloseTo(r.balance - r.contributed, 1);
+    expect(r.series).toHaveLength(11);
+    expect(r.inflationAdjustedBalance).toBeLessThan(r.balance);
+    expect(r.estimatedMonthlyIncome).toBeGreaterThan(0);
+  });
+
+  it('rejects unsafe or nonsensical projection inputs', () => {
+    expect(() => projectInvestment({ startingBalance: -1, monthlyContribution: 100, years: 10, assumedReturnPct: 7, feePct: 0.5 })).toThrow();
+    expect(() => projectInvestment({ startingBalance: 0, monthlyContribution: 100, years: 100, assumedReturnPct: 7, feePct: 0.5 })).toThrow();
   });
 
   it('higher fee yields lower balance (fee drag is real)', () => {
