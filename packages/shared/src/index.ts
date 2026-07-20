@@ -265,3 +265,88 @@ export interface SavePlanRequest {
   profile: FinancialProfile;
   label: string;
 }
+
+// ---------------------------------------------------------------------------
+// Minimal base (hermes/base): two product choices
+//   - Prism Core  (K-12, school): linear vs exponential growth lesson
+//   - Prism Future (adult): investing + future snapshot
+// These interfaces are the shared contracts for the base implementation.
+// ---------------------------------------------------------------------------
+
+/** The two product surfaces selectable from the home screen. */
+export type ProductChoice = 'core' | 'future';
+
+// --- Prism Core: linear vs exponential growth lesson ---
+
+export interface GrowthParams {
+  /** Starting value at year 0. */
+  start: number;
+  /** Constant amount added each year (linear path). */
+  linearIncrement: number;
+  /** Multiplicative factor applied each year (exponential path), e.g. 1.1 = +10%. */
+  exponentialMultiplier: number;
+  /** Number of years to project. */
+  years: number;
+}
+
+export interface GrowthPoint {
+  year: number;
+  linear: number;
+  exponential: number;
+}
+
+export interface GrowthComparison {
+  points: GrowthPoint[];
+  /** Year index where exponential first exceeds linear (null if never in range). */
+  crossoverYear: number | null;
+  prediction: {
+    /** Learner's guess for which path is larger at the final year. */
+    guess: 'linear' | 'exponential';
+    /** Which path is actually larger at the final year. */
+    actual: 'linear' | 'exponential';
+    correct: boolean;
+  };
+}
+
+// --- Prism Future: investing onboarding + projection ---
+
+/** A suggested or custom keyword the user picks during Future onboarding. */
+export interface FutureKeyword {
+  label: string;
+  /** True when the user typed a custom keyword rather than picking a suggestion. */
+  custom: boolean;
+}
+
+export interface InvestmentProfile {
+  startingBalance: number;
+  monthlyContribution: number;
+  years: number;
+  /** Assumed annual return, percent (e.g. 7 = 7%). */
+  assumedReturnPct: number;
+  /** Annual fee, percent (e.g. 0.5 = 0.5%). */
+  feePct: number;
+}
+
+export interface InvestmentProjection {
+  balance: number;
+  contributed: number;
+  growth: number;
+  feeDrag: number;
+}
+
+/** Basic descriptions of the three asset classes the lesson introduces. */
+export interface AssetClassInfo {
+  id: 'etf' | 'stock' | 'bond';
+  title: string;
+  description: string;
+}
+
+// --- Prism Future: placeholder Future Snapshot card (no image gen yet) ---
+
+export interface FutureSnapshot {
+  keywords: FutureKeyword[];
+  projection: InvestmentProjection;
+  /** Placeholder flag: image generation is intentionally not implemented. */
+  imageGenerated: false;
+  note: string;
+}

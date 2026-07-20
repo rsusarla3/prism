@@ -3,54 +3,20 @@
 <head>
 <meta charset="utf-8" />
 <style>
-  :root { --bg:#0f1220; --card:#1a1f35; --ink:#e8ebff; --muted:#9aa3c7; --accent:#7c5cff; --ok:#37d39b; --warn:#ffb454; }
-  * { box-sizing:border-box; }
-  body { margin:0; font:14px/1.5 system-ui,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--ink); width:340px; }
-  header { padding:12px 14px; border-bottom:1px solid #2a3052; }
-  header h1 { margin:0; font-size:16px; }
-  header span { color:var(--muted); font-size:12px; }
-  .pad { padding:14px; display:grid; gap:12px; }
-  .card { background:var(--card); border:1px solid #2a3052; border-radius:12px; padding:12px; }
-  .selected { background:#161b30; border:1px solid #343c66; border-radius:10px; padding:10px; color:var(--muted); font-size:13px; max-height:90px; overflow:auto; }
-  label { color:var(--muted); display:block; margin-bottom:4px; }
-  .goals { display:flex; flex-wrap:wrap; gap:6px; }
-  .goal { background:#2a3052; border:1px solid #363d68; border-radius:999px; padding:5px 10px; cursor:pointer; font-size:12px; }
-  .goal.active { background:var(--accent); border-color:var(--accent); }
-  input, textarea { width:100%; background:#0e1226; color:var(--ink); border:1px solid #2e355c; border-radius:8px; padding:8px; font:inherit; }
-  button { cursor:pointer; border:0; border-radius:8px; padding:8px 12px; font:inherit; font-weight:600; background:var(--accent); color:#fff; }
-  button.ghost { background:#2a3052; color:var(--ink); }
-  button:disabled { opacity:.45; cursor:not-allowed; }
-  .log { font-size:12px; color:var(--muted); white-space:pre-wrap; max-height:200px; overflow:auto; }
-  .ok { color:var(--ok); } .warn { color:var(--warn); }
+  body { margin:0; font:14px/1.5 system-ui,sans-serif; background:#0f1220; color:#e8ebff; padding:16px; width:280px; }
+  h1 { font-size:16px; margin:0 0 4px; }
+  p { color:#9aa3c7; margin:0 0 12px; }
+  button { display:block; width:100%; margin:8px 0; cursor:pointer; border:0; border-radius:9px; padding:11px; font:inherit; font-weight:600; background:#7c5cff; color:#fff; }
+  button.ghost { background:#2a3052; }
+  .note { color:#9aa3c7; font-size:12px; margin-top:10px; }
 </style>
 </head>
 <body>
-<header><h1>Prism</h1><span id="sub">Highlight text on the page, then right-click → Learn with Prism</span></header>
-<div class="pad">
-  <div class="card"><label>Backend host (host laptop's hotspot IP)</label>
-    <input id="apiBase" placeholder="http://localhost:8787" />
-    <button id="saveHost" class="ghost" style="margin-top:8px">Save host</button>
-    <div id="hostStatus" class="log" style="margin-top:6px"></div>
-  </div>
-  <div class="card"><label>Shared content</label><div class="selected" id="shared">— nothing selected —</div></div>
-  <div id="flow" style="display:none">
-    <div class="card">
-      <label>What do you want to do?</label>
-      <div class="goals" id="goals"></div>
-      <button id="start" style="margin-top:10px">Start session</button>
-    </div>
-    <div class="card" id="coach" style="display:none">
-      <label>Your attempt</label>
-      <input id="attempt" placeholder="step / explanation / x = …" />
-      <div class="row" style="display:flex; gap:8px; margin-top:8px">
-        <button id="submit">Submit</button>
-        <button id="reveal" class="ghost" disabled>Show solution</button>
-      </div>
-      <div id="modeRec"></div>
-    </div>
-    <div class="card"><div id="log" class="log"></div></div>
-  </div>
-</div>
-<script src="sidepanel.js"></script>
+  <h1>Prism</h1>
+  <p>Open a product surface.</p>
+  <button id="core">Prism Core — Growth</button>
+  <button id="future" class="ghost">Prism Future — Investing</button>
+  <div class="note">Runs the local web app at http://localhost:8787. Start it with <code>npm run dev</code>.</div>
+  <script src="sidepanel.js"></script>
 </body>
 </html>

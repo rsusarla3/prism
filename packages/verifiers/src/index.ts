@@ -6,6 +6,43 @@
 
 export { parseLinear, solveLinear, verifyLinearSolution } from './linear.js';
 export { compoundGrowth, verifyCompoundGuess, round2 } from './finance.js';
+export { compareGrowth, verifyGrowthPrediction } from './growth.js';
+export { projectInvestment, verifyInvestmentGuess } from './invest.js';
+
+import type { AssetClassInfo } from 'prism-shared';
+
+/** Basic descriptions of ETFs, individual stocks, and bonds (Prism Future). */
+export const ASSET_CLASSES: AssetClassInfo[] = [
+  {
+    id: 'etf',
+    title: 'ETFs (Exchange-Traded Funds)',
+    description:
+      'A single ETF share represents ownership of many underlying securities. Broad ETFs diversify across companies, so one company failing barely moves the fund. You pay an expense ratio (a small annual fee), not a purchase commission.',
+  },
+  {
+    id: 'stock',
+    title: 'Individual Stocks',
+    description:
+      'Buying a share makes you a part-owner of one company. Returns can be high but risk is concentrated: a single bad quarter can cut the value sharply. Most retail investors hold stocks inside a diversified fund rather than alone.',
+  },
+  {
+    id: 'bond',
+    title: 'Bonds',
+    description:
+      'A bond is a loan you make to a government or company that pays periodic interest and returns principal at maturity. Generally lower risk and lower expected return than stocks, which is why bonds are often used to steady a portfolio.',
+  },
+];
+
+/** Suggested onboarding keywords for Prism Future (user may also add custom). */
+export const SUGGESTED_KEYWORDS: string[] = [
+  'retirement',
+  'buy a home',
+  'emergency fund',
+  'kid’s education',
+  'travel fund',
+  'pay off debt',
+  'financial independence',
+];
 
 import { verifyLinearSolution } from './linear.js';
 import { verifyCompoundGuess } from './finance.js';
