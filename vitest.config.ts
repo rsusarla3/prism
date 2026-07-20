@@ -5,5 +5,7 @@ export default defineConfig({
     include: ['packages/*/src/**/*.test.ts'],
     environment: 'node',
     globals: false,
+    pool: 'threads',
+    poolOptions: { threads: { singleThread: true } },
   },
 });
