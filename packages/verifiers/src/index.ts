@@ -7,7 +7,7 @@
 export { parseLinear, solveLinear, verifyLinearSolution } from './linear.js';
 export { compoundGrowth, verifyCompoundGuess, round2 } from './finance.js';
 export { compareGrowth, verifyGrowthPrediction } from './growth.js';
-export { projectInvestment, compareInvestmentScenarios, verifyInvestmentGuess } from './invest.js';
+export { futureValueWithContributions, projectInvestment, compareInvestmentScenarios, verifyInvestmentGuess } from './invest.js';
 
 import type { AssetClassInfo } from 'prism-shared';
 
