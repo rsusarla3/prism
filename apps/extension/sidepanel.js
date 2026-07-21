@@ -16,6 +16,9 @@ const WAYS = [
 ];
 let sceneObserver = null;
 let activeMode = null;  // drives the result view's accent colour
+// Where the ring was when the user reached for it. Redraws while fanned must
+// reuse it, or a resize would snap every card back to an unrotated ring.
+let frozenAngle = 0;
 const OUTPUT_LANGUAGES = [
   ['source', 'Page language'], ['en', 'English'], ['zh', 'Mandarin Chinese'],
   ['hi', 'Hindi'], ['es', 'Spanish'], ['fr', 'French'], ['ar', 'Arabic'],
@@ -157,9 +160,14 @@ async function post(path, body) {
 const CARD_ORDER = ['quiz', 'listen', 'summarize', 'terms', 'visualize'];
 // Words that fall out of the source chip into the prism.
 const STREAM_WORDS = ['VALUE', 'CHOICE', 'SCARCITY', 'TRADEOFF'];
-// One full turn of the prism. Must match the `hexspin` duration in the
-// stylesheet — the per-mode highlight is phased against it.
+// One full revolution of the ring. Must match `hexspin` and every animation
+// phased against it in the stylesheet — `labelflip`, `facefill`, `faceedge`,
+// `facelabel`, `raysweep` and `cardsweep`. Change it here and there together
+// or the labels flip at the wrong moment and the wrong face lights.
 const SPIN_SECONDS = 45;
+// How far the crystal shrinks when the modes fan out. Must match
+// `.stage.fanned .prism` in the stylesheet — ray origins are measured off it.
+const FAN_SCALE = 0.62;
 
 function wayButton(way) {
   return `<button class="way" data-way="${way.id}" style="--mode:${way.color}">
@@ -171,18 +179,25 @@ function wayButton(way) {
 }
 
 /**
- * A pentagonal torus — one face per learning mode.
+ * A pentagonal torus whose five faces ARE the five modes.
  *
  * Vertices sit at 72° intervals offset by 36°, which puts each FACE normal on a
  * card's bearing rather than a corner. Depth is a second ring offset by
  * (dx, dy); the whole shape is then shifted by half that offset so the bore
  * stays optically centred on the source instead of drifting with the extrusion.
+ *
+ * Each face is tinted with its mode's colour and carries its label set along
+ * its own edge, inside the band — the label is part of the face, not a chip
+ * floating over the glass. That is also why the ring no longer turns: text
+ * baked into a rotating shape spends half of every revolution upside down.
+ * The face that has turned to the top is the one lit, which is what carries
+ * the sense of motion — there is no separate pointer inside the bore.
  */
 function pentaTorusSvg() {
   const cx = 100;
   const cy = 100;
-  const R = 92;   // outer radius
-  const r = 62;   // bore radius — the hole the page sits in
+  const R = 96;   // outer radius
+  const r = 54;   // bore radius — the hole the page sits in
   const dx = 13;
   const dy = -10;
   const sides = 5;
@@ -209,6 +224,42 @@ function pentaTorusSvg() {
       fill="url(#${gradient})" stroke="#dce7ff" stroke-opacity="${opacity}"/>`;
   }).join('');
 
+  // One trapezoid per side, in CARD_ORDER. Vertices sit at -90 + 36 + 72i, so
+  // the side spanning vertices k→k+1 has its midpoint at -18 + 72k. Mode i
+  // wants the bearing -90 + 72i (the one its ray and card already use), and
+  // -18 + 72k = -90 + 72i solves to k = i - 1 — hence the step back. Face, ray
+  // and card then always agree about which mode they are.
+  const faces = CARD_ORDER.map((id, i) => {
+    const way = WAYS.find((candidate) => candidate.id === id);
+    if (!way) return '';
+    const k = (i + sides - 1) % sides;
+    const j = (k + 1) % sides;
+    const quad = [outer[k], outer[j], inner[j], inner[k]];
+    // Text runs along the outer edge. Past ±90° it would read upside down, so
+    // fold the angle into (-90, 90] — a half turn along a line is the same
+    // line, it just flows the other way round the ring, which is how any
+    // circular label behaves. Folding modulo 180 rather than adding 180 once:
+    // atan2 reaches 180°, and a single correction left that as 324°, which
+    // renders identically but hands a nonsense angle to the flip timing below.
+    let deg = (Math.atan2(outer[j][1] - outer[k][1], outer[j][0] - outer[k][0]) * 180) / Math.PI;
+    deg = ((deg % 180) + 180) % 180;
+    if (deg > 90) deg -= 180;
+    const mx = quad.reduce((sum, [x]) => sum + x, 0) / 4;
+    const my = quad.reduce((sum, [, y]) => sum + y, 0) / 4;
+    const phase = facePhaseSeconds(i, sides).toFixed(2);
+    return `<g class="face" data-face="${id}" style="--mode:${way.color}; --phase:${phase}s">
+      <polygon class="face-fill" points="${pts(quad)}"/>
+      <polygon class="face-edge" points="${pts([outer[k], outer[j]])}"/>
+      <g class="face-flip" style="transform-box:view-box;
+          transform-origin:${mx.toFixed(1)}px ${my.toFixed(1)}px;
+          animation-delay:${labelFlipDelaySeconds(deg).toFixed(2)}s">
+        <text class="face-label" x="${mx.toFixed(1)}" y="${my.toFixed(1)}" dx="-1.2"
+          transform="rotate(${deg.toFixed(1)} ${mx.toFixed(1)} ${my.toFixed(1)})"
+          text-anchor="middle" dominant-baseline="central">${esc(way.label.toUpperCase())}</text>
+      </g>
+    </g>`;
+  }).join('');
+
   return `<svg viewBox="0 0 200 200">
     <defs>
       <linearGradient id="hex-front" x1="0" y1="0" x2="1" y2="1">
@@ -232,20 +283,10 @@ function pentaTorusSvg() {
       ${wall(inner, 'hex-bore', '.16')}
       <path d="${face(outer, inner)}" fill-rule="evenodd"
         fill="url(#hex-front)" stroke="#e4ecff" stroke-opacity=".68"/>
+      ${faces}
     </g>
   </svg>`;
 }
-
-/**
- * The white ray inside the bore: it turns clockwise at the same rate as the
- * ring, and whichever mode it is pointing at is the one lit outside.
- *
- * The alignment is derived, not eyeballed. Ray `i` is delayed by -i·T/n and
- * peaks at PEAK_AT through its own cycle, so it is brightest at
- * t = i·T/n + PEAK_AT. The sweeper turns 360°/T, so its delay is solved to put
- * it on that card's bearing at exactly that moment.
- */
-const PEAK_AT = 0.07;              // midpoint of the full-brightness hold
 
 /**
  * Register --lit so it interpolates.
@@ -263,43 +304,38 @@ function registerLitProperty() {
     // still works, it just steps rather than eases.
   }
 }
-const FIRST_CARD_ANGLE = -90;      // the ring starts at the top
-
-/** Delay (seconds) for ray `index`, so the modes peak in clockwise order. */
-function rayPhaseSeconds(index, count) {
-  // Negative delays start the animation already in progress. Counting down from
-  // `count` makes later cards peak later in wall time, matching the clockwise
-  // travel of the sweeper — counting up ran the highlight anticlockwise.
-  return -(((count - index) % count) * SPIN_SECONDS) / count;
+/**
+ * Delay (seconds) for face `index`, so each face lights as it reaches the top.
+ *
+ * The ring turns clockwise at 360°/SPIN_SECONDS, and face i starts at bearing
+ * -90 + 72i. It reaches the top (-90) when the ring has turned -72i, i.e. at
+ * t = -i·T/count. A negative animation-delay starts the cycle already that far
+ * in, so the peak lands exactly there.
+ *
+ * Note this counts UP, unlike the old ray phasing, which counted down. That
+ * version was correct for a still ring with a highlight travelling round it —
+ * here it is the ring that moves past a fixed point, so the sign flips.
+ */
+function facePhaseSeconds(index, count) {
+  return -(index * SPIN_SECONDS) / count;
 }
 
-function sweeperDelaySeconds() {
-  const degPerSecond = 360 / SPIN_SECONDS;
-  const tPeak = PEAK_AT * SPIN_SECONDS;
-  // CSS applies delay as angle(t) = degPerSecond · (t − delay). Solve
-  // angle(tPeak) ≡ FIRST_CARD_ANGLE for delay, then shift it negative so the
-  // sweeper is already turning at load instead of waiting.
-  const delay = tPeak - FIRST_CARD_ANGLE / degPerSecond;
-  return ((delay % SPIN_SECONDS) + SPIN_SECONDS) % SPIN_SECONDS - SPIN_SECONDS;
-}
-
-function sweeperSvg(cx, cy, size) {
-  const bore = (62 / 200) * size;          // inner wall of the ring
-  const from = bore * 0.12;                // leaves the page itself
-  const to = bore * 0.98;
-  const delay = sweeperDelaySeconds().toFixed(2);
-  // Three offset pulses on the same path read as light being emitted, rather
-  // than one rigid spoke sweeping round.
-  const pulses = [0, 0.36, 0.72].map((offset) => `
-    <line class="sweep-pulse" pathLength="100" style="animation-delay:${(-offset * 1.6).toFixed(2)}s"
-      x1="${(cx + from).toFixed(1)}" y1="${cy.toFixed(1)}"
-      x2="${(cx + to).toFixed(1)}" y2="${cy.toFixed(1)}"/>`).join('');
-  return `<g class="sweeper" style="transform-origin:${cx.toFixed(1)}px ${cy.toFixed(1)}px;
-      animation-delay:${delay}s">
-    <line class="sweep-track" x1="${(cx + from).toFixed(1)}" y1="${cy.toFixed(1)}"
-      x2="${(cx + to).toFixed(1)}" y2="${cy.toFixed(1)}"/>
-    ${pulses}
-  </g>`;
+/**
+ * Delay (seconds) for a label's flip, given its edge angle in the ring's own
+ * frame.
+ *
+ * A label rides its face, so its angle on screen is `deg + θ`. It becomes
+ * unreadable as that passes ±90°, which happens at θ = 90 - deg and again half
+ * a turn later. The shared `labelflip` keyframes put their two half-turns at
+ * 50% and 100%, so line the 50% mark up with the first crossing.
+ */
+function labelFlipDelaySeconds(deg) {
+  const firstCross = ((90 - deg) / 360) * SPIN_SECONDS;
+  const delay = firstCross - SPIN_SECONDS / 2;
+  // Fold into (-T, 0]. Any delay congruent modulo T behaves identically, but a
+  // negative delay inside one period is the one that reads correctly and is
+  // the only one that survives someone later changing SPIN_SECONDS.
+  return ((delay % SPIN_SECONDS) - SPIN_SECONDS) % SPIN_SECONDS;
 }
 
 function prismSvg() {
@@ -320,11 +356,33 @@ function prismSvg() {
 }
 
 /**
- * Draw a ray from the prism to each card. Origins follow the design: the two
- * side modes leave from the prism's flanks, the three below from quarter,
- * half and three-quarter points along its base.
+ * Read how far the ring has turned, right now, in degrees.
+ *
+ * The spin is a CSS animation, so this is the only honest source of truth —
+ * there is no JS-side clock to consult, and guessing from elapsed time would
+ * drift the moment the animation is paused, throttled, or the panel is hidden.
  */
-function drawScene() {
+function ringAngle() {
+  const hex = document.querySelector('.hex');
+  if (!hex) return 0;
+  const { transform } = getComputedStyle(hex);
+  if (!transform || transform === 'none') return 0;
+  const parts = transform.match(/matrix\(([^)]+)\)/);
+  if (!parts) return 0;
+  const [a, b] = parts[1].split(',').map(Number);
+  return (Math.atan2(b, a) * 180) / Math.PI;
+}
+
+/**
+ * Draw a ray from the prism to each card, and place the cards themselves.
+ *
+ * `rotation` is where the ring has turned to. Every mode's face, ray and card
+ * share one bearing, so passing the live spin angle in here is what makes a
+ * mode fan out from the side it is actually on — freeze the spin with
+ * Visualize at the top and the Visualize card is the one that appears at the
+ * top, every time.
+ */
+function drawScene(rotation = 0) {
   const stage = document.querySelector('.stage');
   const svg = stage?.querySelector('svg.rays');
   const prism = stage?.querySelector('.prism');
@@ -356,11 +414,16 @@ function drawScene() {
   const cardHalf = 50;
   const radiusX = Math.max(stageBox.width / 2 - cardHalf, 118);
   const radiusY = Math.min(stageBox.height * 0.38, 158);
-  // Leave from the ring's OUTER wall (R=92 in a 200 viewBox, flat-to-flat), not
+  // Leave from the ring's OUTER wall (R=96 in a 200 viewBox, flat-to-flat), not
   // the old solid-hexagon radius — that put the origins inside the bore, behind
-  // the source chip.
-  // Face centres of a pentagon sit at R·cos(36°) from the middle.
-  const inradius = Math.min(w, h) * (92 * Math.cos(Math.PI / 5)) / 200;
+  // the source chip. Face centres of a pentagon sit at R·cos(36°) from the
+  // middle.
+  //
+  // Measured against the FANNED crystal, not the resting one. Rays only exist
+  // while the modes are fanned out, and the crystal shrinks by FAN_SCALE as
+  // they go — using its resting size put the origins further out than the ring
+  // itself, which collapsed the two side rays into backwards stubs.
+  const inradius = Math.min(w, h) * FAN_SCALE * (96 * Math.cos(Math.PI / 5)) / 200;
   const step = (Math.PI * 2) / CARD_ORDER.length;
 
   svg.innerHTML = CARD_ORDER.map((id, index) => {
@@ -368,12 +431,22 @@ function drawScene() {
     const way = WAYS.find((candidate) => candidate.id === id);
     if (!card || !way) return '';
 
-    // Start at the top and go clockwise, so the spectrum reads round the ring.
-    const angle = -Math.PI / 2 + index * step;
+    // Start at the top and go clockwise, so the spectrum reads round the ring,
+    // then carry the ring's own rotation so this card lands on its own face.
+    const angle = -Math.PI / 2 + index * step + (rotation * Math.PI) / 180;
     const cardX = centreX + radiusX * Math.cos(angle);
     const cardY = centreY + radiusY * Math.sin(angle);
     card.style.left = `${cardX.toFixed(1)}px`;
     card.style.top = `${cardY.toFixed(1)}px`;
+
+    // Two homes per mode. `left/top` is the fanned position; the docked one is
+    // expressed as an offset transform, because transforms animate on the
+    // compositor while animating left/top would relayout every frame.
+    // Dock on the face's own label, so a card looks like it peels off the side
+    // it belongs to. The labels sit at the mid-band radius, (R + r) / 2 = 75.
+    const dockRadius = Math.min(w, h) * (75 / 200);
+    card.style.setProperty('--dock-x', `${(centreX + dockRadius * Math.cos(angle) - cardX).toFixed(1)}px`);
+    card.style.setProperty('--dock-y', `${(centreY + dockRadius * Math.sin(angle) - cardY).toFixed(1)}px`);
 
     // The ray runs along the same bearing: out of the glass, into the card.
     // Stop at the card's own edge along that bearing — using the larger of its
@@ -392,12 +465,14 @@ function drawScene() {
     const y2 = centreY + reach * Math.sin(angle);
 
     // Phase the highlight to the spin so each mode lights as a face comes
-    // round to it — one after another, never all at once.
-    const phase = rayPhaseSeconds(index, CARD_ORDER.length);
+    // round to it — one after another, never all at once. Cards and rays only
+    // exist while the ring is frozen, so this is inert until it is not, but it
+    // has to agree with the faces or a card could light out of turn.
+    const phase = facePhaseSeconds(index, CARD_ORDER.length);
     card.style.setProperty('--phase', `${phase}s`);
     return `<path data-ray="${id}" stroke="${way.color}" style="--phase:${phase}s"
       d="M ${x1.toFixed(1)} ${y1.toFixed(1)} L ${x2.toFixed(1)} ${y2.toFixed(1)}"/>`;
-  }).join('') + sweeperSvg(centreX, centreY, Math.min(w, h));
+  }).join('');
 }
 
 /** The compact source line carried into every result view. */
@@ -466,10 +541,11 @@ function renderHome() {
   // Rays are measured from laid-out cards, so re-measure whenever the panel
   // is resized — a side panel is a user-draggable width.
   sceneObserver?.disconnect();
-  sceneObserver = new ResizeObserver(() => drawScene());
+  sceneObserver = new ResizeObserver(() => drawScene(frozenAngle));
   sceneObserver.observe(document.querySelector('.stage'));
 
   bindMagnify();
+  bindFan();
 
   // The source chip is the light: pressing it drives the stream harder.
   const origin = document.querySelector('#source-origin');
@@ -522,6 +598,54 @@ function bindWays() {
  */
 const MAGNIFY_RANGE = 130;   // px of influence either side of a card's centre
 const MAGNIFY_AMOUNT = 0.16; // peak growth, 1.0 -> 1.16
+
+/**
+ * Two states for the stage.
+ *
+ * At rest the modes ARE the faces of the crystal, and the crystal turns. Bring
+ * a pointer into the stage and the spin freezes exactly where it is, then the
+ * modes fan out from the sides they were on.
+ *
+ * Freezing first and measuring second is the whole trick. The cards are laid
+ * out from the ring's live angle, so a mode always emerges from its own face:
+ * stop the spin with Visualize at the top and Visualize is the card at the
+ * top. Laying them out on fixed bearings instead would have every mode jump to
+ * an unrelated side the moment you reached for it.
+ *
+ * Keyboard focus counts as intent too, otherwise the modes could be tabbed to
+ * while still docked and invisible behind the glass.
+ */
+function bindFan() {
+  const stage = document.querySelector('.stage');
+  if (!stage) return;
+
+  const fan = (on) => {
+    if (on === stage.classList.contains('fanned')) return;
+    if (on) {
+      // Sample the angle BEFORE pausing: pausing is what makes it hold still,
+      // and we want the position the user was actually looking at.
+      frozenAngle = ringAngle();
+      stage.classList.add('frozen');
+      drawScene(frozenAngle);
+      // Force the new docked positions to be committed as the transition's
+      // starting point. Without this the browser coalesces the layout write
+      // and the class change into one frame, and the cards slide out of
+      // wherever they happened to be sitting before.
+      void stage.offsetHeight;
+      stage.classList.add('fanned');
+    } else {
+      stage.classList.remove('fanned');
+      stage.classList.remove('frozen');
+    }
+  };
+
+  stage.addEventListener('pointerenter', () => fan(true));
+  stage.addEventListener('pointerleave', () => fan(false));
+  stage.addEventListener('focusin', () => fan(true));
+  stage.addEventListener('focusout', (event) => {
+    if (!stage.contains(event.relatedTarget)) fan(false);
+  });
+}
 
 function bindMagnify() {
   const grid = document.querySelector('.mode-grid');

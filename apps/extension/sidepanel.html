@@ -74,17 +74,120 @@
      compose rather than overwrite one another. */
   /* A hexagonal torus: the source sits in the bore. One axis only — the ring
      turns in its own plane, so the hole stays put and the page never moves. */
-  .prism{position:absolute; left:50%; top:var(--core-y,50%); width:142px; height:142px;
+  .prism{position:absolute; left:50%; top:var(--core-y,50%); width:238px; height:238px;
     transform:translate(-50%,-50%); z-index:2;
     filter:drop-shadow(0 12px 18px rgba(1,2,13,.8)) drop-shadow(0 0 16px rgba(116,150,255,.13));}
   .prism svg{display:block; width:100%; height:100%; overflow:visible;}
+  /* Fanning out pulls the crystal back so the cards have somewhere to land. */
+  .prism{transition:transform .42s cubic-bezier(.22,1,.36,1);}
+  .stage.fanned .prism{transform:translate(-50%,-50%) scale(.62);}
+  .source-halo,.source-origin{transition:transform .42s cubic-bezier(.22,1,.36,1);}
+  /* One slow, constant-rate revolution. Linear on purpose: an eased spin reads
+     as a wobble, and anything faster reads as a loading spinner.
+     It stops dead the instant the user reaches for it, and the cards are then
+     laid out from the angle it stopped at — see bindFan. */
   .hex{transform-box:fill-box; transform-origin:center;
     animation:hexspin 45s linear infinite;}
   @keyframes hexspin{to{transform:rotate(360deg);}}
+  .stage.frozen .hex,
+  .stage.frozen .face-flip{animation-play-state:paused;}
+
+  /* ------------------------------------------------- the faces as the modes */
+  /* Each face is its own mode: tinted with that mode's colour, edged in it, and
+     carrying the label set along the edge inside the band. */
+  .face-fill{fill:var(--mode);}
+  .face-edge{fill:none; stroke:var(--mode); stroke-linecap:round;}
+  /* Small caps, widely tracked, light weight — the label reads as engraved
+     into the face rather than typed on top of it, and the wide tracking is
+     what lets a nine-letter mode still fit the band. */
+  .face-label{fill:#f2f6ff; font-family:ui-sans-serif,system-ui,sans-serif;
+    font-size:9.5px; font-weight:500; letter-spacing:.2em;
+    /* The centring nudge is a `dx` attribute, not a CSS transform: a CSS
+       transform here would replace the rotate() that sets the label along its
+       edge, since CSS transforms override the SVG presentation attribute. */
+    /* Painted over its own dark outline so the label stays legible whatever
+       colour the face beneath it is. */
+    paint-order:stroke; stroke:rgba(3,5,16,.72); stroke-width:2.4;}
+
+  /* All three sweeps share the 45s cycle and the per-mode --phase set in JS, so
+     the face that lights is always the one that has turned to the top.
+     They are split apart deliberately: dimming the whole group crushed the
+     tint on the four unlit faces to nothing, and every mode's colour has to
+     stay readable at rest. So the FILL carries the highlight over a wide
+     range, while the label barely dims at all. */
+  .face{--phase:0s;}
+  .face-fill{animation:facefill 45s linear infinite; animation-delay:var(--phase,0s);}
+  .face-edge{animation:faceedge 45s linear infinite; animation-delay:var(--phase,0s);}
+  .face-label{animation:facelabel 45s linear infinite; animation-delay:var(--phase,0s);}
+  .face-fill,.face-edge,.face-label{transition:opacity .3s ease;}
+  @keyframes facefill{
+    0%{fill-opacity:.5; animation-timing-function:linear;}
+    14%{fill-opacity:.5; animation-timing-function:cubic-bezier(.45,0,.35,1);}
+    22%{fill-opacity:.23; animation-timing-function:linear;}
+    92%{fill-opacity:.23; animation-timing-function:cubic-bezier(.65,0,.55,1);}
+    100%{fill-opacity:.5;}
+  }
+  @keyframes faceedge{
+    0%{stroke-width:3.4; stroke-opacity:1; animation-timing-function:linear;}
+    14%{stroke-width:3.4; stroke-opacity:1; animation-timing-function:cubic-bezier(.45,0,.35,1);}
+    22%{stroke-width:2; stroke-opacity:.62; animation-timing-function:linear;}
+    92%{stroke-width:2; stroke-opacity:.62; animation-timing-function:cubic-bezier(.65,0,.55,1);}
+    100%{stroke-width:3.4; stroke-opacity:1;}
+  }
+  @keyframes facelabel{
+    0%{opacity:1; animation-timing-function:linear;}
+    14%{opacity:1; animation-timing-function:cubic-bezier(.45,0,.35,1);}
+    22%{opacity:.82; animation-timing-function:linear;}
+    92%{opacity:.82; animation-timing-function:cubic-bezier(.65,0,.55,1);}
+    100%{opacity:1;}
+  }
+
+  /* A label is set along its own edge, so it turns with the ring — and would
+     spend half of every revolution upside down. It needs to turn over twice a
+     revolution, timed (in JS, per label) to the moment it passes vertical.
+     Watching it swing through the turn was the ugly part, so the turn happens
+     while the label is invisible: it fades out, rotates in the dark, and fades
+     back the right way up. Nothing is ever seen rotating, only dissolving.
+     The last keyframe holds 180deg at zero opacity, so looping back to the 0%
+     rotation is invisible too. */
+  .face-flip{animation:labelflip 45s linear infinite;}
+  /* The two dark windows are symmetric about 50% and 100% — the two moments
+     the label passes vertical, which is what the per-label delay lines up
+     with. Asymmetric windows would drift the fade off the crossing it exists
+     to hide. */
+  @keyframes labelflip{
+    0%{transform:rotate(0deg); opacity:0;}
+    3%{transform:rotate(0deg); opacity:1;}
+    47%{transform:rotate(0deg); opacity:1;}
+    50%{transform:rotate(0deg); opacity:0;}
+    50.01%{transform:rotate(180deg); opacity:0;}
+    53%{transform:rotate(180deg); opacity:1;}
+    97%{transform:rotate(180deg); opacity:1;}
+    100%{transform:rotate(180deg); opacity:0;}
+  }
+  /* Fanning out hands the labels over to the cards, so the engraved ones go
+     away entirely — the same five words on the glass and around it at once was
+     just noise.
+     `animation:none`, not `animation-play-state:paused`: both `labelflip` and
+     `facelabel` animate opacity, and a keyframe beats a plain declaration even
+     while paused, so a paused animation would keep painting the label at
+     whatever opacity it stopped on. Dropping the animation is what lets
+     opacity:0 apply at all. */
+  .stage.fanned .face-flip,
+  .stage.fanned .face-label{animation:none; opacity:0;}
+  .stage.fanned .face-fill,.stage.fanned .face-edge{animation-play-state:paused; opacity:.3;}
+  .stage.focusing .face-fill,
+  .stage.focusing .face-edge,
+  .stage.focusing .face-label{animation-play-state:paused;}
 
   /* One slow, constant-rate revolution. Linear timing on purpose: an eased
      spin reads as a wobble, and anything faster reads as a loading spinner. */
-  .rays{position:absolute; inset:0; width:100%; height:100%; z-index:0; overflow:visible;}
+  .rays{position:absolute; inset:0; width:100%; height:100%; z-index:0; overflow:visible;
+    opacity:0; transition:opacity .3s ease;}
+  /* Rays connect the crystal to the cards, so they only mean anything once the
+     cards are out. At rest there is nothing to connect to — the faces are the
+     modes, and the one at the top is the one being picked out. */
+  .stage.fanned .rays{opacity:1;}
   .rays path{fill:none; stroke-width:2; filter:drop-shadow(0 0 5px currentColor);
     transition:opacity .2s ease, stroke-width .2s ease;
     animation:raysweep 45s linear infinite; animation-delay:var(--phase,0s);}
@@ -96,7 +199,6 @@
     22%{opacity:.22; stroke-width:1.8; animation-timing-function:linear;}
     92%{opacity:.22; stroke-width:1.8; animation-timing-function:cubic-bezier(.65,0,.55,1);}
     100%{opacity:1; stroke-width:3.4;}
-  }
   }
   /* --lit has to be a registered custom property or it cannot be animated:
      unregistered ones flip at the halfway point instead of interpolating. */
@@ -122,6 +224,28 @@
        box-shadow:0 0 0 1px var(--mode), 0 0 26px color-mix(in srgb,var(--mode) 55%,transparent),
                   0 12px 30px rgba(0,0,0,.45);}
   }
+
+  .way{--docked:1;}
+  .stage.fanned .way{--docked:0;}
+  /* Once the modes are out, the cycling highlight stops: the ring has already
+     stopped, so a card lighting up on its own would be pointing at nothing.
+     From here it is the pointer that decides what is emphasised. Removing the
+     animation rather than pausing it matters — a paused animation holds
+     whatever --lit it froze at, which would leave one card stuck larger. */
+  .stage.fanned .way,
+  .stage.fanned .rays path{animation:none;}
+
+  /* At rest the faces of the crystal ARE the modes, so the cards get out of the
+     way completely rather than sitting on top of the glass as loose labels.
+     They stay in the tab order — focus fans the stage open, which brings them
+     back before anything can be focused invisibly.
+     The !important is unavoidable: `cardsweep` is a keyframe animation, and
+     keyframes beat normal declarations, so it would otherwise keep painting a
+     box on whichever mode is lit. */
+  .stage:not(.fanned) .way{
+    opacity:0!important; pointer-events:none;
+    background:transparent!important; border-color:transparent!important;
+    box-shadow:none!important;
   }
 
   /* The moment the pointer is involved, the sweep hands over to the user:
@@ -132,27 +256,6 @@
   .rays path.dim{opacity:.3;}
   .rays path.on{stroke-width:3;}
 
-  /* The white ray inside the bore, turning clockwise at the ring's own rate.
-     It is the cause the outer highlight reads as an effect: whichever mode it
-     points at is the one lit. */
-  .sweeper{animation:sweep 45s linear infinite;}
-  @keyframes sweep{to{transform:rotate(360deg);}}
-  .sweep-track{stroke:rgba(226,238,255,.18); stroke-width:1;}
-  /* Pulses travel outward from the page. pathLength normalises the dash maths
-     so the same values work whatever the panel width makes the radius. */
-  .sweep-pulse{stroke:#fff; stroke-width:2.4; stroke-linecap:round;
-    stroke-dasharray:16 84; filter:drop-shadow(0 0 7px rgba(226,238,255,.95));
-    animation:emit 1.6s linear infinite;}
-  @keyframes emit{
-    from{stroke-dashoffset:16; opacity:0;}
-    18%{opacity:1;}
-    75%{opacity:1;}
-    to{stroke-dashoffset:-84; opacity:0;}
-  }
-  /* Hovering hands control to the pointer, so the sweeper stands down. */
-  .stage.focusing .sweeper{animation-play-state:paused; opacity:.2;}
-  .stage.focusing .sweep-pulse{animation-play-state:paused;}
-
   /* ------------------------------------------------------------ mode cards */
   /* The five modes are placed around the prism rather than listed. Scale is
      driven by pointer proximity (see bindMagnify in sidepanel.js), so the
@@ -162,8 +265,17 @@
     --mode:#fff; --scale:1; --nudge:0px; position:absolute; background:rgba(18,22,42,.97);
     border:1px solid var(--line); border-radius:9px; color:var(--ink); text-align:left;
     padding:7px 17px 7px 10px; min-height:0; width:28%; max-width:100px;
-    box-shadow:0 8px 20px rgba(0,0,0,.19); transform:translate(-50%,-50%) scale(calc(var(--scale) * var(--lit,1)));
-    transition:background .18s ease, border-color .18s ease, box-shadow .18s ease;
+    box-shadow:0 8px 20px rgba(0,0,0,.19); /* --docked is the switch (1 docked, 0 fanned) and the JS-set --dock-x/y are
+       the travel. It has to work this way round: JS writes the offsets inline,
+       and an inline style beats any stylesheet rule, so the fanned state could
+       never zero them directly. Flipping a multiplier the stylesheet owns lets
+       the transform transition interpolate the whole journey. */
+    transform:translate(-50%,-50%)
+      translate(calc(var(--dock-x,0px) * var(--docked,1)),
+                calc(var(--dock-y,0px) * var(--docked,1)))
+      scale(calc(var(--scale) * var(--lit,1) * (1 - .16 * var(--docked,1))));
+    transition:transform .42s cubic-bezier(.22,1,.36,1), opacity .3s ease,
+      background .28s ease, border-color .28s ease, box-shadow .28s ease;
     will-change:transform;
   }
   .way:hover,.way:focus-visible{background:var(--surface-2);
@@ -322,7 +434,7 @@
      room than the prism is wide, so they cover the glass and swallow the
      origins of the Quiz and Listen rays. Narrow both below 480px. */
   @media(max-width:479px){
-    .prism{width:134px; height:134px;}
+    .prism{width:206px; height:206px;}
     .way{width:28%; max-width:96px;}
   }
 
