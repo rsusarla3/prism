@@ -53,20 +53,24 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
 async function captureActiveTab() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (!tab?.id || !/^https?:/.test(tab.url || '')) {
+  if (!tab?.id || (tab.url && !/^https?:/.test(tab.url))) {
     throw new Error('Open a regular HTTP or HTTPS page first.');
   }
-  const privacy = assessPagePrivacy(tab.url);
-  if (privacy.sensitive) {
-    throw new Error(`Prism does not automatically read ${privacy.reason} pages. Highlight only the non-sensitive text you want to analyze.`);
+  const knownPrivacy = tab.url ? assessPagePrivacy(tab.url) : { sensitive: false, reason: '' };
+  if (knownPrivacy.sensitive) {
+    throw new Error(`Prism does not automatically read ${knownPrivacy.reason} pages. Highlight only the non-sensitive text you want to analyze.`);
   }
 
   const frameResults = await chrome.scripting.executeScript({
     target: { tabId: tab.id, allFrames: true },
     func: extractReadablePage,
   });
-  const readableFrames = frameResults.map(({ result }) => result).filter((result) => result?.text);
-  const main = readableFrames[0];
+  const readableFrames = frameResults.map(({ result, frameId }) => result ? { ...result, frameId } : null).filter((result) => result?.text);
+  const main = readableFrames.find((frame) => frame.frameId === 0) || readableFrames[0];
+  const pageUrl = main?.url || tab.url;
+  if (!pageUrl || !/^https?:/.test(pageUrl)) throw new Error('Open a regular HTTP or HTTPS page first.');
+  const privacy = assessPagePrivacy(pageUrl);
+  if (privacy.sensitive) throw new Error(`Prism does not automatically read ${privacy.reason} pages. Highlight only the non-sensitive text you want to analyze.`);
   const seen = new Set();
   const sections = [];
   for (const frame of readableFrames) {
@@ -80,7 +84,7 @@ async function captureActiveTab() {
 
   return {
     source: {
-      url: tab.url,
+      url: pageUrl,
       title: main?.title || tab.title || tab.url,
       language: main?.language || '',
       text,
@@ -103,6 +107,7 @@ function extractReadablePage() {
     .filter((text, index, values) => text.length > 1 && values.indexOf(text) === index);
   const fallback = root.innerText.replace(/\s+/g, ' ').trim();
   return {
+    url: location.href,
     title: document.title.trim(),
     language: document.documentElement.lang || navigator.language || '',
     text: (blocks.join('\n\n') || fallback).slice(0, 20000),
