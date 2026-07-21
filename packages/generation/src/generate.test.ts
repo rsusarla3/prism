@@ -11,7 +11,7 @@ const VALID_BUNDLE: StudyBundle = {
     language: 'en',
     droppedForCoherence: ['a cookie banner'],
   },
-  read: { segments: [{ text: 'Some text.', glosses: [], recap: 'A recap.' }] },
+  read: { segments: [{ text: 'Some text.', glosses: [{ term: 'idea', definition: 'a thought' }], recap: 'A recap.' }] },
   listen: { script: 'Here is what happened.', segmentIndex: [0], highlightLeadMs: 300 },
   watch: { kind: 'diagram', steps: [{ caption: 'First step', description: 'It shows the idea.' }], altText: 'A labelled diagram of the idea.' },
   explore: { timeline: [{ label: 'Start', detail: 'It began.', order: 0 }] },

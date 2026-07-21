@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { StudyBundle } from 'prism-shared';
-import { validateStudyBundle } from './validate.js';
+import { validateStudyBundle, MAX_GLOSS_WORDS } from './validate.js';
 
 function validBundle(): StudyBundle {
   return {
@@ -167,18 +167,68 @@ describe('validateStudyBundle', () => {
     expect(result.issues.some((i) => i.rule === 'invalid-structure')).toBe(true);
   });
 
-  it('rejects a learner-visible number that is absent from the source', () => {
+  it('rejects a plotted data value that is absent from the source', () => {
     const bundle = clone(validBundle());
-    bundle.read.segments[0].recap = 'Plants produce 42 units.';
-    const result = validateStudyBundle(bundle, 'Plants convert sunlight into energy.');
+    bundle.explore.data = { caption: 'Shots', series: [{ name: 'Spain', points: [{ x: 'shots', y: 42 }] }] };
+    const result = validateStudyBundle(bundle, 'Spain had 20 shots.');
     expect(result.issues.some((i) => i.rule === 'number-source-required')).toBe(true);
   });
 
   it('accepts equivalent comma-formatted source numbers', () => {
     const bundle = clone(validBundle());
-    bundle.read.segments[0].recap = 'The population reached 1000.';
+    bundle.explore.data = { caption: 'Crowd', series: [{ name: 'Attendance', points: [{ x: 'fans', y: 1000 }] }] };
     const result = validateStudyBundle(bundle, 'The population reached 1,000.');
     expect(result.issues.some((i) => i.rule === 'number-source-required')).toBe(false);
+  });
+
+  it('does not flag numbers in prose, where distractors and paraphrase legitimately differ', () => {
+    const bundle = clone(validBundle());
+    bundle.read.segments[0].recap = 'About 82.5 thousand fans attended.';
+    bundle.quiz.items[0].options[1].text = '3-0';
+    const result = validateStudyBundle(bundle, 'A crowd of 82,500 watched Spain win 2-1.');
+    expect(result.issues.some((i) => i.rule === 'number-source-required')).toBe(false);
+  });
+
+  it('reads both digits of a hyphenated scoreline as source numbers', () => {
+    const bundle = clone(validBundle());
+    bundle.explore.data = { caption: 'Goals', series: [{ name: 'Argentina', points: [{ x: 'goals', y: 1 }] }] };
+    const result = validateStudyBundle(bundle, 'Spain beat Argentina 2-1.');
+    expect(result.issues.some((i) => i.rule === 'number-source-required')).toBe(false);
+  });
+
+  it('rejects an explore block with neither timeline nor data', () => {
+    const bundle = clone(validBundle());
+    bundle.explore = {};
+    const result = validateStudyBundle(bundle);
+    expect(result.issues.some((i) => i.rule === 'explore-requires-timeline-or-data')).toBe(true);
+  });
+
+  it('rejects narration that leaves a read segment uncovered', () => {
+    const bundle = clone(validBundle());
+    bundle.read.segments.push({ text: 'Oxygen is released.', glosses: [], recap: 'Oxygen leaves the leaf.' });
+    const result = validateStudyBundle(bundle);
+    expect(result.issues.some((i) => i.rule === 'listen-must-cover-segments')).toBe(true);
+  });
+
+  it('rejects a bundle with no glossed terms', () => {
+    const bundle = clone(validBundle());
+    bundle.read.segments[0].glosses = [];
+    const result = validateStudyBundle(bundle);
+    expect(result.issues.some((i) => i.rule === 'gloss-required')).toBe(true);
+  });
+
+  it('rejects a gloss definition that has grown into a paragraph', () => {
+    const bundle = clone(validBundle());
+    bundle.read.segments[0].glosses[0].definition = 'word '.repeat(MAX_GLOSS_WORDS + 1).trim();
+    const result = validateStudyBundle(bundle);
+    expect(result.issues.some((i) => i.rule === 'gloss-definition-too-long')).toBe(true);
+  });
+
+  it('accepts a gloss definition at the length ceiling', () => {
+    const bundle = clone(validBundle());
+    bundle.read.segments[0].glosses[0].definition = 'word '.repeat(MAX_GLOSS_WORDS).trim();
+    const result = validateStudyBundle(bundle);
+    expect(result.issues.some((i) => i.rule === 'gloss-definition-too-long')).toBe(false);
   });
 
   it('rejects enum values that do not match the shared contract', () => {

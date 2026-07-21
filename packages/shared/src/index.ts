@@ -454,6 +454,17 @@ export interface QuizItem {
   explanation: string;
 }
 
+/**
+ * A generated media artifact. `dataUrl` keeps the demo stateless — there is no
+ * blob store, so the bytes travel inline. Swap for a hosted URL if that changes.
+ */
+export interface MediaAsset {
+  dataUrl: string;
+  mimeType: string;
+  /** Present when the provider reports it; renderers should not assume it. */
+  durationMs?: number;
+}
+
 export interface StudyBundle {
   meta: {
     title: string;
@@ -471,11 +482,19 @@ export interface StudyBundle {
     script: string;
     segmentIndex: number[];
     highlightLeadMs: number;
+    /**
+     * Optional. Absent unless a speech provider is configured — renderers fall
+     * back to the browser's SpeechSynthesis, which supplies its own word
+     * boundaries, so audio is a quality upgrade and never a requirement.
+     */
+    audio?: MediaAsset;
   };
   watch: {
     kind: 'diagram' | 'sequence';
     steps: WatchStep[];
     altText: string;
+    /** Optional. Absent unless an image provider is configured. */
+    image?: MediaAsset;
   };
   explore: {
     timeline?: TimelineEntry[];

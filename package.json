@@ -12,7 +12,7 @@
     "typecheck": "tsc --noEmit -p packages/shared/tsconfig.json && tsc --noEmit -p packages/verifiers/tsconfig.json && tsc --noEmit -p packages/curriculum/tsconfig.json && tsc --noEmit -p packages/learning-engine/tsconfig.json && tsc --noEmit -p packages/generation/tsconfig.json && tsc --noEmit -p packages/api-client/tsconfig.json && tsc --noEmit -p apps/web/tsconfig.json",
     "lint": "npm run typecheck",
     "test": "npm run build && vitest run",
-    "dev": "HOST=0.0.0.0 PORT=8787 node apps/web/dist/server.js"
+    "dev": "HOST=0.0.0.0 PORT=8787 node --env-file-if-exists=.env apps/web/dist/server.js"
   },
   "devDependencies": {
     "@types/node": "^22.5.0",
