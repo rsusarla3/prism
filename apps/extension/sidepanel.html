@@ -1,1 +1,132 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>:root{font:14px/1.5 system-ui;color:#17201d;background:#f7f7f2}*{box-sizing:border-box}body{margin:0;padding:20px}.brand{font-size:23px;font-weight:850;margin-bottom:24px}.mark{background:#17201d;color:#d8ff63;border-radius:8px;padding:4px 8px}.eyebrow{text-transform:uppercase;letter-spacing:1.4px;color:#1e6b50;font-size:11px;font-weight:800}.card{background:white;border:1px solid #dfe3dc;border-radius:18px;padding:17px;margin:14px 0}.selection{max-height:130px;overflow:auto;white-space:pre-wrap}.muted{color:#66716d;font-size:12px}.goals{display:grid;gap:7px}button{border:1px solid #dfe3dc;background:white;border-radius:11px;padding:11px;text-align:left;font:inherit;font-weight:700;cursor:pointer}button:hover{border-color:#17201d}button.primary{background:#17201d;color:white;text-align:center}textarea{width:100%;min-height:85px;border:1px solid #dfe3dc;border-radius:11px;padding:10px;font:inherit;resize:vertical}.error{color:#9d351d;background:#fff0ed;border-radius:11px;padding:10px}</style></head><body><div class="brand"><span class="mark">◇</span> prism</div><div id="app">Loading…</div><script src="sidepanel.js"></script></body></html>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Prism</title>
+<style>
+  :root{
+    --bg:#07080f; --surface:#12162a; --surface-2:#1a2040;
+    --ink:#eef1ff; --muted:#8b93b8; --dim:#5f678f; --line:#242b4d;
+    --ray-1:#ff5f6d; --ray-2:#ff9f45; --ray-3:#ffd93d;
+    --ray-4:#3ddc97; --ray-5:#4aa8ff; --ray-6:#a06bff;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; padding:0 0 22px;
+    background:
+      radial-gradient(420px 300px at 62% 24%, #141838 0%, transparent 66%),
+      var(--bg);
+    color:var(--ink);
+    font:14px/1.5 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+
+  header{
+    display:flex; align-items:center; gap:8px;
+    padding:14px 16px; border-bottom:1px solid var(--line);
+  }
+  header .glyph{
+    width:13px; height:11px; clip-path:polygon(50% 0,100% 100%,0 100%);
+    background:linear-gradient(105deg,var(--ray-1),var(--ray-3),var(--ray-4),var(--ray-5),var(--ray-6));
+  }
+  header b{font-size:15px; font-weight:650; letter-spacing:-.02em;}
+
+  .wrap{padding:16px;}
+  .eyebrow{
+    font-size:9.5px; font-weight:600; letter-spacing:.12em;
+    text-transform:uppercase; color:var(--dim); margin:0 0 7px 1px;
+  }
+
+  /* the page you're on = the light entering the prism */
+  .source{
+    display:flex; align-items:center; gap:8px;
+    padding:9px 11px; border-radius:9px;
+    background:rgba(255,255,255,.04); border:1px solid var(--line);
+    box-shadow:0 0 26px -8px rgba(200,215,255,.40);
+  }
+  .source .dot{width:5px;height:5px;border-radius:50%;background:#fff;opacity:.85;flex:none;}
+  .source .url{
+    font:500 12px ui-monospace,SFMono-Regular,Menlo,monospace;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  .subtle{
+    margin:6px 1px 0; font-size:11px; color:var(--dim);
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+
+  svg.scene{width:100%; height:auto; display:block; margin:6px 0 2px;}
+  .in{stroke:#fff; stroke-width:2; fill:none; stroke-linecap:round; opacity:.85;}
+  /* dash + gap must stay shorter than the path or the spark is offscreen */
+  .spark{
+    stroke:#fff; stroke-width:2.6; stroke-linecap:round; fill:none;
+    stroke-dasharray:12 70; animation:travel 2.3s linear infinite; opacity:.95;
+  }
+  @keyframes travel{from{stroke-dashoffset:82;} to{stroke-dashoffset:0;}}
+  .face{fill:rgba(255,255,255,.10); stroke:rgba(255,255,255,.42); stroke-width:1; stroke-linejoin:round;}
+  .side{fill:rgba(255,255,255,.07);}
+  .base{fill:rgba(255,255,255,.04);}
+  .internal{stroke:rgba(255,255,255,.34); stroke-width:1.2; fill:none;}
+  .ray{stroke-width:2; fill:none; stroke-linecap:round; transition:stroke-width .18s, opacity .18s;}
+  .ray.dim{opacity:.3;}
+  .ray.on{stroke-width:4;}
+
+  /* the ways out */
+  .ways{display:grid; gap:7px; margin-top:12px;}
+  .way{
+    display:flex; align-items:center; gap:11px; width:100%;
+    padding:11px 12px; border-radius:10px; text-align:left;
+    background:var(--surface); border:1px solid var(--line);
+    color:var(--ink); font:inherit; cursor:pointer;
+    transition:background .16s, border-color .16s, transform .16s;
+  }
+  .way:hover:not(:disabled){background:var(--surface-2); border-color:#33407a; transform:translateX(2px);}
+  .way:focus-visible{outline:2px solid var(--ray-6); outline-offset:2px;}
+  .way:disabled{opacity:.42; cursor:not-allowed;}
+  .way .bar{width:3px; height:30px; border-radius:2px; flex:none;}
+  .way .txt{display:flex; flex-direction:column; gap:1px; min-width:0;}
+  .way .txt b{font-size:13.5px; font-weight:600;}
+  .way .txt span{font-size:11.5px; color:var(--muted);}
+  .way .next{
+    margin-left:auto; flex:none; font-size:9px; letter-spacing:.08em;
+    text-transform:uppercase; color:var(--dim);
+    border:1px solid var(--line); border-radius:5px; padding:2px 5px;
+  }
+
+  /* result */
+  .out{
+    margin-top:14px; padding:13px; border-radius:10px;
+    background:var(--surface); border:1px solid var(--line);
+  }
+  .out h3{margin:0 0 9px; font-size:13.5px; font-weight:650;}
+  .out ul{margin:0; padding-left:17px;}
+  .out li{margin:0 0 7px; font-size:12.5px; color:var(--muted);}
+  .out li strong{color:var(--ink); font-weight:600;}
+  .figs{display:flex; flex-wrap:wrap; gap:6px;}
+  .fig{
+    font:600 12px ui-monospace,Menlo,monospace;
+    background:var(--surface-2); border:1px solid var(--line);
+    border-radius:6px; padding:4px 8px; cursor:pointer; color:var(--ink);
+  }
+  .fig:hover{border-color:var(--ray-4);}
+  .note{margin:10px 1px 0; font-size:11px; color:var(--dim);}
+  .err{color:var(--ray-2); font-size:12.5px;}
+  .spin{font-size:12px; color:var(--dim);}
+  .back{
+    margin-top:10px; background:none; border:0; color:var(--muted);
+    font:inherit; font-size:12px; cursor:pointer; padding:0;
+  }
+  .back:hover{color:var(--ink);}
+
+  @media (prefers-reduced-motion:reduce){
+    .spark{animation:none; opacity:0;}
+    .way{transition:none;}
+  }
+</style>
+</head>
+<body>
+  <header><span class="glyph" aria-hidden="true"></span><b>prism</b></header>
+  <div class="wrap" id="app"><p class="spin">Reading the page you're on…</p></div>
+  <script src="sidepanel.js"></script>
+</body>
+</html>
