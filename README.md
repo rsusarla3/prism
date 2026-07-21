@@ -152,6 +152,13 @@ Captured sources and their generated learning assets are stored in
 is generated and cached separately: selecting one ray never requests the other
 assets.
 
+For a credential-free local engine, run an OpenAI-compatible server such as
+Ollama and set `LLM_BASE_URL=http://127.0.0.1:11434/v1` plus `LLM_MODEL` to the
+installed model name. `LLM_API_KEY` is optional and is intended for compatible
+hosted providers. When both compatible and Gemini settings exist, the explicit
+compatible endpoint wins. Provider credentials stay in the server process and
+are never shipped in the Chrome extension.
+
 For UI development with hot reload, keep the API server running and start Vite in another terminal:
 
 ```bash
@@ -178,6 +185,22 @@ The production build compiles the React UI into `apps/web/public`, where the dep
 The extension does not monitor other tabs or browsing history. Active-page
 capture runs only after the learner invokes Prism, and it reads only that page
 or an explicit selection from the same page.
+
+All five extension modes are curriculum-neutral. Their only content input is
+the active page or explicit selection: Prism Core and Prism Future demo content
+is never injected into extension results. The local analyzer ranks terms using
+page frequency, headings, position, and language-specific filler-word filters.
+It supports readable text inside permitted page frames and accessible labels
+for equations, diagrams, and canvases. Sensitive account, health, email, and
+password pages are blocked from automatic capture; selected text remains the
+explicit fallback.
+
+Results can be shown in the page language or English, Mandarin Chinese, Hindi,
+Spanish, French, Arabic, Bengali, Portuguese, Russian, or Urdu. This choice
+applies to all five modes, including quiz feedback, visual labels, and spoken
+copy. Prism tries Chrome's on-device translator first, falls back to the
+configured server engine, and visibly preserves the source language if neither
+path supports the requested pair.
 
 ## Quality commands
 

@@ -5,6 +5,8 @@ export { generateStudyBundle } from './generate.js';
 export type { LLMClient, GenerateResult } from './generate.js';
 export { createGeminiClient, DEFAULT_GEMINI_MODEL } from './providers/gemini.js';
 export type { GeminiClientOptions } from './providers/gemini.js';
+export { createOpenAICompatibleClient } from './providers/openai-compatible.js';
+export type { OpenAICompatibleClientOptions } from './providers/openai-compatible.js';
 export { prepareGenerateRequest, GenerationRequestError, MAX_SOURCE_CHARS } from './request.js';
 export { STUDY_BUNDLE_JSON_SCHEMA } from './schema.js';
 export { generateLearningAsset } from './asset.js';
