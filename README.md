@@ -11,95 +11,93 @@ The hackathon build is educational software, not an answer bot, brokerage calcul
 
 ## Architecture
 
-A learner highlights anything on the web. Prism turns it into a lesson that
-teaches the same idea through **several senses at once** — because that is what
-the evidence supports (see [Research basis](docs/prism/RESEARCH_BASIS.md)).
+A learner highlights anything on the web. Prism turns that selection into a
+lesson that teaches the same idea through several modalities at once, a design
+grounded in peer-reviewed learning science
+(see [Research basis](docs/prism/RESEARCH_BASIS.md)).
 
-### The pipeline
+### Pipeline
 
 ```mermaid
-%%{init: {'theme':'base','themeVariables':{'fontSize':'22px','fontFamily':'system-ui, sans-serif','primaryColor':'#eef2ff','primaryTextColor':'#111827','primaryBorderColor':'#6366f1','lineColor':'#94a3b8'}}}%%
+%%{init: {'theme':'base','themeVariables':{'fontSize':'20px','fontFamily':'system-ui, sans-serif','primaryColor':'#f8fafc','primaryTextColor':'#0f172a','primaryBorderColor':'#475569','lineColor':'#94a3b8'}}}%%
 flowchart TD
-    PAGE["🌐 <b>Any web page</b><br/>article · problem · chart"]
-    EXT["🧩 <b>1 · CAPTURE</b><br/>Chrome extension<br/>grabs the selection"]
-    UND["🧠 <b>2 · UNDERSTAND</b><br/>concept · reading level · intent"]
-    GEN["✨ <b>3 · GENERATE</b><br/>model builds study assets<br/><i>inside curriculum guardrails</i>"]
-    VER["✅ <b>4 · VERIFY</b><br/>deterministic math<br/>+ answer gate"]
-    OUT["📚 <b>5 · THE LESSON</b>"]
+    PAGE["Any web page<br/>article, problem, or chart"]
+    EXT["1 &nbsp; Capture<br/>extension reads the selection"]
+    UND["2 &nbsp; Understand<br/>concept, reading level, intent"]
+    GEN["3 &nbsp; Generate<br/>model builds study assets<br/>within curriculum guardrails"]
+    VER["4 &nbsp; Verify<br/>deterministic math, answer gate"]
+    OUT["5 &nbsp; Lesson"]
 
-    PAGE ==> EXT ==> UND ==> GEN ==> VER ==> OUT
+    PAGE --> EXT --> UND --> GEN --> VER --> OUT
 
-    classDef built fill:#dcfce7,stroke:#16a34a,stroke-width:3px,color:#14532d;
-    classDef todo fill:#fef3c7,stroke:#d97706,stroke-width:3px,stroke-dasharray:6 4,color:#78350f;
-    classDef page fill:#f1f5f9,stroke:#64748b,stroke-width:3px,color:#0f172a;
-    class PAGE page;
+    classDef done fill:#e2e8f0,stroke:#334155,stroke-width:2px,color:#0f172a;
+    classDef todo fill:#ffffff,stroke:#94a3b8,stroke-width:2px,stroke-dasharray:5 4,color:#334155;
+    class PAGE,VER,OUT done;
     class EXT,UND,GEN todo;
-    class VER,OUT built;
 ```
 
-🟩 **built** · 🟨 **to build** — the generation pipeline (steps 1–3) is the
-hackathon's main work; the verifiers and lesson UI already exist.
+Solid nodes exist today. Dashed nodes are the build ahead: capture, understand,
+and generate are the hackathon's main work, while the verifiers and lesson UI
+already ship.
 
-### What step 3 generates — and why each asset earns its place
+### Generated assets and their evidence
 
 ```mermaid
-%%{init: {'theme':'base','themeVariables':{'fontSize':'22px','fontFamily':'system-ui, sans-serif','primaryColor':'#eef2ff','primaryTextColor':'#111827','primaryBorderColor':'#6366f1','lineColor':'#94a3b8'}}}%%
+%%{init: {'theme':'base','themeVariables':{'fontSize':'20px','fontFamily':'system-ui, sans-serif','primaryColor':'#f8fafc','primaryTextColor':'#0f172a','primaryBorderColor':'#475569','lineColor':'#94a3b8'}}}%%
 flowchart LR
-    GEN["✨ <b>GENERATE</b>"]
+    GEN["Generate"]
 
-    A["📖 <b>READ</b><br/>glossary + recap"]
-    B["🔊 <b>LISTEN</b><br/>synced narration"]
-    C["🎬 <b>WATCH</b><br/>captioned visual"]
-    D["📊 <b>EXPLORE</b><br/>timeline + data"]
-    E["❓ <b>QUIZ</b><br/>+ feedback"]
+    A["Read<br/>glossary, recap"]
+    B["Listen<br/>synced narration"]
+    C["Watch<br/>captioned visual"]
+    D["Explore<br/>timeline, data"]
+    E["Quiz<br/>with feedback"]
 
-    GEN ==> A
-    GEN ==> B
-    GEN ==> C
-    GEN ==> D
-    GEN ==> E
+    GEN --> A
+    GEN --> B
+    GEN --> C
+    GEN --> D
+    GEN --> E
 
-    A --- A1["glossing<br/><b>moderate ↑ vocab</b>"]
-    B --- B1["modality<br/><b>g = 0.82</b>"]
-    C --- C1["multimedia<br/><b>g = 0.68</b>"]
-    D --- D1["step interaction<br/><b>d = 0.76</b>"]
-    E --- E1["testing + feedback<br/><b>0.73 SD</b>"]
+    A --- A1["glossing<br/>moderate vocabulary gain"]
+    B --- B1["modality principle<br/>g = 0.82"]
+    C --- C1["multimedia principle<br/>g = 0.68"]
+    D --- D1["step-level interaction<br/>d = 0.76"]
+    E --- E1["testing with feedback<br/>0.73 SD"]
 
-    classDef asset fill:#eef2ff,stroke:#6366f1,stroke-width:3px,color:#1e1b4b;
-    classDef eviCls fill:#ffffff,stroke:#cbd5e1,stroke-width:2px,color:#334155;
-    classDef gen fill:#fef3c7,stroke:#d97706,stroke-width:3px,color:#78350f;
-    class A,B,C,D,E asset;
-    class A1,B1,C1,D1,E1 eviCls;
-    class GEN gen;
+    classDef asset fill:#e2e8f0,stroke:#334155,stroke-width:2px,color:#0f172a;
+    classDef evi fill:#ffffff,stroke:#cbd5e1,stroke-width:1px,color:#475569;
+    class GEN,A,B,C,D,E asset;
+    class A1,B1,C1,D1,E1 evi;
 ```
 
-> **The rule that keeps us honest:** the model writes *content*; it never does
-> *math*. Every number a learner sees comes from a deterministic verifier
-> (`packages/verifiers`), and the answer stays gated until a real attempt is
-> made. The model also never picks a modality "to match a learning style" —
-> every learner gets every modality. See
-> [Research basis](docs/prism/RESEARCH_BASIS.md).
+Two constraints hold the design together. The model writes content but never
+performs arithmetic: every number a learner sees comes from a deterministic
+verifier in `packages/verifiers`, and answers stay gated until a real attempt is
+recorded. The model also never selects a modality to match a learner's supposed
+style; every learner receives every modality, because modality matching is not
+supported by the evidence.
 
-### Today's runtime (what already ships)
+### Current runtime
 
 ```mermaid
-%%{init: {'theme':'base','themeVariables':{'fontSize':'22px','fontFamily':'system-ui, sans-serif','primaryColor':'#dcfce7','primaryTextColor':'#111827','primaryBorderColor':'#16a34a','lineColor':'#94a3b8'}}}%%
+%%{init: {'theme':'base','themeVariables':{'fontSize':'20px','fontFamily':'system-ui, sans-serif','primaryColor':'#f8fafc','primaryTextColor':'#0f172a','primaryBorderColor':'#475569','lineColor':'#94a3b8'}}}%%
 flowchart LR
-    CORE["<b>Core.tsx</b><br/>Predict → Explore<br/>→ Explain → Transfer"]
-    FUT["<b>Future.tsx</b><br/>Goals → Model<br/>→ Assets → Snapshot"]
-    SRV["⚙️ <b>Node server</b><br/>zero-dep http"]
-    GROW["<b>compareGrowth()</b><br/>linear vs exponential"]
-    INV["<b>projectInvestment()</b><br/>contributed vs balance"]
+    CORE["Core.tsx<br/>Predict, Explore,<br/>Explain, Transfer"]
+    FUT["Future.tsx<br/>Goals, Model,<br/>Assets, Snapshot"]
+    SRV["Node server<br/>zero-dependency http"]
+    GROW["compareGrowth()<br/>linear vs exponential"]
+    INV["projectInvestment()<br/>contributed vs balance"]
 
-    CORE ==>|"/api/core/growth"| SRV
-    FUT ==>|"/api/future/invest"| SRV
-    SRV ==> GROW
-    SRV ==> INV
+    CORE -->|"/api/core/growth"| SRV
+    FUT -->|"/api/future/invest"| SRV
+    SRV --> GROW
+    SRV --> INV
     GROW -.->|crossover| CORE
     INV -.->|growth gap| FUT
 
-    classDef ui fill:#eef2ff,stroke:#6366f1,stroke-width:3px,color:#1e1b4b;
-    classDef eng fill:#dcfce7,stroke:#16a34a,stroke-width:3px,color:#14532d;
+    classDef ui fill:#ffffff,stroke:#475569,stroke-width:2px,color:#0f172a;
+    classDef eng fill:#e2e8f0,stroke:#334155,stroke-width:2px,color:#0f172a;
     class CORE,FUT ui;
     class SRV,GROW,INV eng;
 ```

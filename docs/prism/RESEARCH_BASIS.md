@@ -11,8 +11,8 @@ or writing pitch/demo copy. If you make a pedagogical claim, cite it from here.
 
 ## The one rule that protects our credibility
 
-> **Multimodal presentation helps ALL learners.** ✅
-> **Matching a modality to a student's "learning style" does NOT.** ❌
+> **Multimodal presentation helps all learners. Matching a modality to a
+> student's "learning style" does not.**
 
 Never write copy that says Prism "adapts to your learning style" or "matches how
 you learn best." That is the **meshing hypothesis**, and it is debunked:
@@ -36,7 +36,7 @@ Say instead: **"multiple modalities, for every learner."**
 
 **Be honest about limits — it strengthens the pitch:**
 - Steenbergen-Hu & Cooper (2013), *JEP* 105(4) — K-12 **math** ITS effects near zero (g≈0.01–0.09). Benefits are subject-dependent; strongest in reading.
-- arXiv:2511.04997 (2025) — recent K-12/US meta g=0.271, **lower in rural schools**. ⚠️ preprint.
+- arXiv:2511.04997 (2025) — recent K-12/US meta g=0.271, **lower in rural schools**. preprint.
 
 ---
 
@@ -61,7 +61,7 @@ claim — here's what it says and what it means for Prism.
 |---|---|---|
 | **Multimedia effect** (g=0.68) | People learn better from **words + pictures** than words alone. | The animated/captioned visuals and charts, rather than text-only. |
 | **Modality principle** (g=0.82) | With a graphic, people learn better from **spoken narration** than from on-screen text — because speech uses the *auditory* channel, leaving the visual channel free for the graphic instead of making the eyes do two jobs. | Narrating content instead of stacking more text on screen. **Our largest effect size.** |
-| **Redundancy principle** (g=0.14) | Adding **on-screen text that duplicates the narration** *on top of* a graphic tends to hurt — the eyes split between picture and text. | ⚠️ The one that appears to argue *against* karaoke — see below. |
+| **Redundancy principle** (g=0.14) | Adding **on-screen text that duplicates the narration** *on top of* a graphic tends to hurt — the eyes split between picture and text. | The one that appears to argue *against* karaoke — see below. |
 | **Spatial contiguity** | Put related words and pictures **near each other** in space, not separated. | Captions sit on the animation, not in a legend below it. |
 | **Temporal contiguity** | Present narration and its matching visual **at the same time**, not one then the other. | Word highlighting fires in sync with the spoken word. |
 | **Segmenting** | Break content into **learner-paced chunks** instead of one continuous stream. | Per-paragraph recaps and the stepped flow. |
@@ -101,7 +101,7 @@ average tutored student scored higher than about **73%** of untutored students.
 Kulik & Fletcher's **+0.66 SD** is the same idea stated directly — a median student
 moves from the **50th to roughly the 75th percentile**.
 
-⚠️ Two honesty notes: effect sizes shrink on **standardized** tests versus
+Two honesty notes: effect sizes shrink on **standardized** tests versus
 researcher-made ones, and education meta-analyses skew optimistic
 (publication bias). Quote these as *evidence of direction and rough magnitude*,
 not as a promise of what Prism will deliver.
@@ -119,7 +119,7 @@ not as a promise of what Prism will deliver.
 ### Plain-English recaps (AI-simplified text)
 - *Applied Psycholinguistics* (Cambridge) — simplification improves fluency + comprehension in beginning readers. **Largest benefit for slower/lower-comprehension readers → make it adaptive, not one-size-fits-all.**
 - CTML segmenting + coherence principles (PMC9762622) — chunking meaning aids processing.
-- arXiv:2505.01980 (2025) — LLM-simplified text raised comprehension, lowered cognitive load. ⚠️ preprint; pair with the Cambridge study.
+- arXiv:2505.01980 (2025) — LLM-simplified text raised comprehension, lowered cognitive load. preprint; pair with the Cambridge study.
 
 ### Synchronized narration ("karaoke" word highlighting)
 - Cromley & Chen (2025), *Educational Research Review*, pii S1747938X25000673 — **modality principle g = 0.82** (narration over on-screen text). Open text: par.nsf.gov/servlets/purl/10637927
@@ -135,7 +135,7 @@ not as a promise of what Prism will deliver.
 ### Animation + captions, and visuals generally
 - Cromley & Chen (2025) — **multimedia principle g = 0.68** (words + pictures > words alone); **spatial/temporal contiguity** large effect → keep captions synced and adjacent to the action.
 - Paivio dual coding / Mayer CTML dual-channel — the theoretical backbone.
-- ⚠️ Boundary: the same meta found **animation/games/simulations less consistent** than static text+diagram, with larger effects on *inferential/transfer* than rote recall. Caption for meaning; don't lean on animation alone.
+- Boundary: the same meta found **animation/games/simulations less consistent** than static text+diagram, with larger effects on *inferential/transfer* than rote recall. Caption for meaning; don't lean on animation alone.
 
 ### Interactive stepping (timelines, sliders, tap-through)
 - VanLehn (2011) — **step-level interaction d=0.76** vs answer-only systems (~d=0.3). Interactivity does real work.
@@ -146,7 +146,7 @@ not as a promise of what Prism will deliver.
 - Schwieren, Barenberg & Dutke (2017), *Psychology Learning & Teaching* 16(2), DOI 10.1177/1475725717695149 — testing effect **d = 0.56**; **with feedback 0.73 SD vs 0.39 without**.
 - Kurnaz (2025), *Psychology in the Schools*, DOI 10.1002/pits.70056 — K-12 gamification motivation **g = 0.654** (k=41); larger for secondary (1.015) / high school (0.821) than primary (0.309); larger for extrinsic than intrinsic.
 - Transfer: Yang et al. (2021) g=0.50 classroom; Pan & Rickard (2018) d=0.40 transfer to new questions.
-- ⚠️ Sailer & Homner (PMC8037535) — gamification novelty decays: short interventions ES=1.57 vs long-run 0.30. **Streaks should evolve, not sit static.**
+- Note — Sailer & Homner (PMC8037535) — gamification novelty decays: short interventions ES=1.57 vs long-run 0.30. **Streaks should evolve, not sit static.**
 
 ---
 
