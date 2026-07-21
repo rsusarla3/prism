@@ -375,6 +375,7 @@ const server = http.createServer(async (req, res) => {
   } catch (e) {
     const status = (e as { status?: number }).status ?? 400;
     const issues = (e as { issues?: unknown }).issues;
+    if (status >= 500) console.error('[Prism generation error]', e);
     send(res, status, { error: (e as Error).message, ...(issues ? { issues } : {}) });
   }
 });

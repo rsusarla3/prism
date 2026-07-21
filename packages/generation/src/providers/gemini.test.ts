@@ -67,4 +67,11 @@ describe('createGeminiClient', () => {
     const client = createGeminiClient({ apiKey: 'k' });
     await expect(client.complete({ system: 's', user: 'u' })).rejects.toThrow(/text content/);
   });
+
+  it('reports a useful provider error when the network request fails', async () => {
+    const error = Object.assign(new TypeError('fetch failed'), { cause: new Error('socket closed') });
+    vi.stubGlobal('fetch', vi.fn(async () => { throw error; }));
+    const client = createGeminiClient({ apiKey: 'k' });
+    await expect(client.complete({ system: 's', user: 'u' })).rejects.toThrow(/Could not reach Gemini's API \(socket closed\)/);
+  });
 });
