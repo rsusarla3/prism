@@ -147,10 +147,10 @@ while still using the real local source-library API.
 AI generation needs a server-side `GEMINI_API_KEY` environment variable.
 Without it, learning-material generation returns `501`; capture and the rest of
 the app still work. Optional `GEMINI_MODEL` overrides the default model id.
-Captured sources and their generated Read, Listen, Watch, Explore, and Quiz
-assets are stored in `data/prism.sqlite`; optional `PRISM_DB_PATH` changes that
-location. Each asset is generated and cached separately: selecting one ray
-never requests the other four.
+Captured sources and their generated learning assets are stored in
+`data/prism.sqlite`; optional `PRISM_DB_PATH` changes that location. Each asset
+is generated and cached separately: selecting one ray never requests the other
+assets.
 
 For UI development with hot reload, keep the API server running and start Vite in another terminal:
 
@@ -166,17 +166,19 @@ The production build compiles the React UI into `apps/web/public`, where the dep
 1. Open `chrome://extensions`.
 2. Enable **Developer mode**.
 3. Select **Load unpacked** and choose `apps/extension`.
-4. Open the side panel from the extension toolbar and choose a ray: **Read**,
-   **Listen**, **Watch**, **Explore**, or **Quiz**.
-5. Approve Chrome's optional website permission when asked. Prism captures only
-   the active page (or your explicit selected text), saves it locally, and
-   generates only the learning material represented by that ray.
+4. Open the side panel from the extension toolbar and choose a ray: **Quiz**,
+   **Story**, **Digest**, **Numbers**, **Growth**, or **Your future**. The first
+   four use the captured page; Growth and Your future open the existing Prism
+   learning products.
+5. Prism uses Chrome's temporary `activeTab` access to capture only the active
+   page (or your explicit selected text), saves it locally, and generates only
+   the learning material represented by that ray.
 6. Click the same ray again to reopen its saved result without another model
    request. Use **Open source library** to see all captured pages and assets.
 
 The extension does not monitor pages or browsing history. Active-page capture
-asks for optional HTTP/HTTPS access only after the learner clicks a ray, and it
-reads only that active page or an explicit selection.
+runs only after the learner invokes Prism and clicks a generated-learning ray;
+it reads only that active page or an explicit selection from the same page.
 
 ## Quality commands
 
