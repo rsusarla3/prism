@@ -171,6 +171,11 @@ The production build compiles the React UI into `apps/web/public`, where the dep
 4. Highlight ordinary webpage text and choose **Learn this with Prism** from the context menu.
 5. Confirm the selection and choose a learning goal in the side panel.
 
+The side panel then posts the selection to `POST /api/generate` and renders the
+returned lesson in place, so the server must be running (`npm run dev`) with a
+`GEMINI_API_KEY` set. Narration plays through the browser's own speech
+synthesis, whose word-boundary events drive the karaoke highlighting.
+
 The extension requests only `sidePanel`, `storage`, `contextMenus`, and temporary `activeTab` access. It does not request browsing history or broad host access, monitor pages, or read other tabs.
 
 ## Quality commands
