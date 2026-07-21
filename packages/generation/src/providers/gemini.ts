@@ -13,6 +13,7 @@ export interface GeminiClientOptions {
 
 export const DEFAULT_GEMINI_MODEL = 'gemini-3.5-flash';
 const DEFAULT_TIMEOUT_MS = 45_000;
+const MAX_ATTEMPTS = 3;
 
 export class GeminiProviderError extends Error {
   readonly status = 502;
@@ -35,11 +36,12 @@ export function createGeminiClient(opts: GeminiClientOptions): LLMClient {
 
   return {
     async complete({ system, user, schema }) {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), timeoutMs);
-      let res: Response;
-      try {
-        res = await fetch(
+      for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), timeoutMs);
+        let res: Response;
+        try {
+          res = await fetch(
           `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
           {
             method: 'POST',
@@ -54,29 +56,44 @@ export function createGeminiClient(opts: GeminiClientOptions): LLMClient {
             }),
             signal: controller.signal,
           },
-        );
-      } catch (error) {
-        if (controller.signal.aborted) {
-          throw new GeminiProviderError(`Gemini did not respond within ${Math.round(timeoutMs / 1000)} seconds. Check the API key's project, billing, and model access, then try again.`, 'timeout');
+          );
+        } catch (error) {
+          if (controller.signal.aborted) {
+            throw new GeminiProviderError(`Gemini did not respond within ${Math.round(timeoutMs / 1000)} seconds. Check the API key's project, billing, and model access, then try again.`, 'timeout');
+          }
+          if (attempt < MAX_ATTEMPTS) {
+            await retryDelay(attempt);
+            continue;
+          }
+          const cause = error && typeof error === 'object' ? (error as { cause?: unknown }).cause : undefined;
+          const detail = cause instanceof Error ? ` (${cause.message})` : '';
+          throw new GeminiProviderError(`Could not reach Gemini's API after ${MAX_ATTEMPTS} attempts${detail}`, 'network');
+        } finally {
+          clearTimeout(timeout);
         }
-        const cause = error && typeof error === 'object' ? (error as { cause?: unknown }).cause : undefined;
-        const detail = cause instanceof Error ? ` (${cause.message})` : '';
-        throw new GeminiProviderError(`Could not reach Gemini's API${detail}`, 'network');
-      } finally {
-        clearTimeout(timeout);
-      }
 
-      if (!res.ok) {
-        const text = await res.text().catch(() => res.statusText);
-        throw new GeminiProviderError(`Gemini API ${res.status}: ${text}`, 'response');
-      }
+        if (!res.ok) {
+          const text = await res.text().catch(() => res.statusText);
+          if (res.status === 503 && attempt < MAX_ATTEMPTS) {
+            await retryDelay(attempt);
+            continue;
+          }
+          throw new GeminiProviderError(`Gemini API ${res.status}: ${text}`, 'response');
+        }
 
-      const data = (await res.json()) as GeminiResponse;
-      const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (typeof text !== 'string') {
-        throw new GeminiProviderError('Gemini response did not contain text content.', 'response');
+        const data = (await res.json()) as GeminiResponse;
+        const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (typeof text !== 'string') {
+          throw new GeminiProviderError('Gemini response did not contain text content.', 'response');
+        }
+        return text;
       }
-      return text;
+      throw new GeminiProviderError('Gemini generation failed unexpectedly.', 'network');
     },
   };
+}
+
+function retryDelay(attempt: number): Promise<void> {
+  const delayMs = attempt === 1 ? 700 : 1_800;
+  return new Promise((resolve) => setTimeout(resolve, delayMs));
 }
