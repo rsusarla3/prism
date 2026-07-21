@@ -186,6 +186,12 @@ The extension does not monitor other tabs or browsing history. Active-page
 capture runs only after the learner invokes Prism, and it reads only that page
 or an explicit selection from the same page.
 
+Prism requests HTTP/HTTPS host access because Chrome does not consistently
+extend `activeTab` access to a persistent side panel. This permission makes the
+"works on any website" interaction reliable; the implementation still queries
+only the currently active tab after invocation, never scans tabs in the
+background, and applies the sensitive-page guard before automatic capture.
+
 All five extension modes are curriculum-neutral. Their only content input is
 the active page or explicit selection: Prism Core and Prism Future demo content
 is never injected into extension results. The local analyzer ranks terms using
