@@ -11,55 +11,103 @@ The hackathon build is educational software, not an answer bot, brokerage calcul
 
 ## Architecture
 
-Both experiences ride the **same idea** — linear vs. exponential growth — so
-what a learner discovers in Core reappears as compounding in Future. The data
-flow below shows how a request travels from the UI to the deterministic
-verifiers and back.
+A learner highlights anything on the web. Prism turns it into a lesson that
+teaches the same idea through **several senses at once** — because that is what
+the evidence supports (see [Research basis](docs/prism/RESEARCH_BASIS.md)).
+
+### The pipeline
 
 ```mermaid
+%%{init: {'theme':'base','themeVariables':{'fontSize':'22px','fontFamily':'system-ui, sans-serif','primaryColor':'#eef2ff','primaryTextColor':'#111827','primaryBorderColor':'#6366f1','lineColor':'#94a3b8'}}}%%
 flowchart TD
-    subgraph client["🖥️ Client"]
-        EXT["Chrome extension<br/>(MV3 side panel)<br/>captures selection"]
-        APP["React UI · App.tsx"]
-        CORE["Core.tsx<br/>Predict → Explore → Explain → Transfer"]
-        FUT["Future.tsx<br/>Goals → Model → Assets → Snapshot"]
-        IMG["imageGen.ts"]
-        EXT -->|opens| APP
-        APP --> CORE
-        APP --> FUT
-    end
+    PAGE["🌐 <b>Any web page</b><br/>article · problem · chart"]
+    EXT["🧩 <b>1 · CAPTURE</b><br/>Chrome extension<br/>grabs the selection"]
+    UND["🧠 <b>2 · UNDERSTAND</b><br/>concept · reading level · intent"]
+    GEN["✨ <b>3 · GENERATE</b><br/>model builds study assets<br/><i>inside curriculum guardrails</i>"]
+    VER["✅ <b>4 · VERIFY</b><br/>deterministic math<br/>+ answer gate"]
+    OUT["📚 <b>5 · THE LESSON</b>"]
 
-    subgraph server["⚙️ Node server · apps/web/src/server.ts (zero-dep http)"]
-        RG["POST /api/core/growth"]
-        RI["POST /api/future/invest"]
-        RC["GET /api/future/content"]
-    end
+    PAGE ==> EXT ==> UND ==> GEN ==> VER ==> OUT
 
-    subgraph pkgs["📦 Packages (deterministic, tested)"]
-        GROW["verifiers/growth.ts<br/>compareGrowth()"]
-        INV["verifiers/invest.ts<br/>projectInvestment()"]
-        CONTENT["verifiers/index.ts<br/>ASSET_CLASSES · FUTURE_GOALS"]
-        SHARED["shared<br/>authoritative types & contracts"]
-    end
-
-    CORE -->|"api.growth()"| RG --> GROW -->|"GrowthComparison<br/>(linear vs exponential + crossover)"| CORE
-    FUT  -->|"api.invest()"| RI --> INV -->|"InvestmentProjection<br/>(contributed vs balance = growth)"| FUT
-    FUT  -->|"api.content()"| RC --> CONTENT --> FUT
-    FUT  -.->|"user's own key,<br/>never touches server"| IMG -.-> OPENAI["OpenAI Images API"]
-
-    SHARED -.->|types| client
-    SHARED -.->|types| pkgs
-
-    classDef live fill:#e8f5e9,stroke:#43a047,color:#1b5e20;
-    classDef ext fill:#fff3e0,stroke:#fb8c00,color:#e65100;
-    class GROW,INV,CONTENT,SHARED live;
-    class OPENAI ext;
+    classDef built fill:#dcfce7,stroke:#16a34a,stroke-width:3px,color:#14532d;
+    classDef todo fill:#fef3c7,stroke:#d97706,stroke-width:3px,stroke-dasharray:6 4,color:#78350f;
+    classDef page fill:#f1f5f9,stroke:#64748b,stroke-width:3px,color:#0f172a;
+    class PAGE page;
+    class EXT,UND,GEN todo;
+    class VER,OUT built;
 ```
 
-> The linear path in Core (`+increment`) and the "you contribute" line in
-> Future are the **same shape**; the exponential path (`×multiplier`) and the
-> compounding "balance" line are the **same shape**. The gap between them —
-> Core's *crossover* — is Future's *growth*. One engine, two audiences.
+🟩 **built** · 🟨 **to build** — the generation pipeline (steps 1–3) is the
+hackathon's main work; the verifiers and lesson UI already exist.
+
+### What step 3 generates — and why each asset earns its place
+
+```mermaid
+%%{init: {'theme':'base','themeVariables':{'fontSize':'22px','fontFamily':'system-ui, sans-serif','primaryColor':'#eef2ff','primaryTextColor':'#111827','primaryBorderColor':'#6366f1','lineColor':'#94a3b8'}}}%%
+flowchart LR
+    GEN["✨ <b>GENERATE</b>"]
+
+    A["📖 <b>READ</b><br/>glossary + recap"]
+    B["🔊 <b>LISTEN</b><br/>synced narration"]
+    C["🎬 <b>WATCH</b><br/>captioned visual"]
+    D["📊 <b>EXPLORE</b><br/>timeline + data"]
+    E["❓ <b>QUIZ</b><br/>+ feedback"]
+
+    GEN ==> A
+    GEN ==> B
+    GEN ==> C
+    GEN ==> D
+    GEN ==> E
+
+    A --- A1["glossing<br/><b>moderate ↑ vocab</b>"]
+    B --- B1["modality<br/><b>g = 0.82</b>"]
+    C --- C1["multimedia<br/><b>g = 0.68</b>"]
+    D --- D1["step interaction<br/><b>d = 0.76</b>"]
+    E --- E1["testing + feedback<br/><b>0.73 SD</b>"]
+
+    classDef asset fill:#eef2ff,stroke:#6366f1,stroke-width:3px,color:#1e1b4b;
+    classDef eviCls fill:#ffffff,stroke:#cbd5e1,stroke-width:2px,color:#334155;
+    classDef gen fill:#fef3c7,stroke:#d97706,stroke-width:3px,color:#78350f;
+    class A,B,C,D,E asset;
+    class A1,B1,C1,D1,E1 eviCls;
+    class GEN gen;
+```
+
+> **The rule that keeps us honest:** the model writes *content*; it never does
+> *math*. Every number a learner sees comes from a deterministic verifier
+> (`packages/verifiers`), and the answer stays gated until a real attempt is
+> made. The model also never picks a modality "to match a learning style" —
+> every learner gets every modality. See
+> [Research basis](docs/prism/RESEARCH_BASIS.md).
+
+### Today's runtime (what already ships)
+
+```mermaid
+%%{init: {'theme':'base','themeVariables':{'fontSize':'22px','fontFamily':'system-ui, sans-serif','primaryColor':'#dcfce7','primaryTextColor':'#111827','primaryBorderColor':'#16a34a','lineColor':'#94a3b8'}}}%%
+flowchart LR
+    CORE["<b>Core.tsx</b><br/>Predict → Explore<br/>→ Explain → Transfer"]
+    FUT["<b>Future.tsx</b><br/>Goals → Model<br/>→ Assets → Snapshot"]
+    SRV["⚙️ <b>Node server</b><br/>zero-dep http"]
+    GROW["<b>compareGrowth()</b><br/>linear vs exponential"]
+    INV["<b>projectInvestment()</b><br/>contributed vs balance"]
+
+    CORE ==>|"/api/core/growth"| SRV
+    FUT ==>|"/api/future/invest"| SRV
+    SRV ==> GROW
+    SRV ==> INV
+    GROW -.->|crossover| CORE
+    INV -.->|growth gap| FUT
+
+    classDef ui fill:#eef2ff,stroke:#6366f1,stroke-width:3px,color:#1e1b4b;
+    classDef eng fill:#dcfce7,stroke:#16a34a,stroke-width:3px,color:#14532d;
+    class CORE,FUT ui;
+    class SRV,GROW,INV eng;
+```
+
+> **The full circle:** Core's linear path (`+increment`) and Future's "you
+> contribute" line are the *same shape*. Core's exponential path (`×multiplier`)
+> and Future's compounding "balance" are the *same shape*. **Core's crossover is
+> Future's growth.** One engine, two audiences.
 
 | Location | Responsibility |
 |---|---|
