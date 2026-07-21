@@ -74,7 +74,47 @@ Use **Vite + React + TypeScript**:
 7. **Polish** — empty / error / loading states for **every** async action; friendly,
    plain-language copy; no dead ends.
 
-## Hard constraints
+## Animation standards (explicit)
+Animations must feel *intentional and premium*, not decorative noise:
+- **Chart hero (Core):** animate the linear/exponential paths drawing in (stroke-dasharray
+  draw-on), points easing into place, and smooth tweening when sliders change values
+  (interpolate between old and new series rather than snapping).
+- **Future projection chart:** animate the area/line growth; crossfade scenario overlays
+  (`startLater`, `higherFee`) when toggled.
+- **Step transitions:** directional slide/fade between the 4 Core steps and the Future
+  stages; respect `prefers-reduced-motion` (instant, no transform/opacity animation).
+- **Micro-interactions:** button/card press feedback, slider thumb ripple, number
+  count-ups for balances, toast entrance, skeleton shimmer while fetching.
+- **Performance:** prefer CSS transforms/opacity and `will-change`; cap concurrent
+  animations; target 60fps on a mid-range phone. No layout thrash.
+- **Accessibility:** every animation is non-essential and disabled under
+  `prefers-reduced-motion: reduce`. Never animate anything that conveys *solely*
+  through motion (pair with text/state).
+
+## Image-generation tool (explicit — new requirement)
+The Future Snapshot card must incorporate a **real image-generation tool** (previously
+a static placeholder). Implement it **client-side** to keep the server zero-dep and avoid
+exposing any provider secret:
+- **Provider abstraction:** a small `imageGen` module that calls an image model API
+  (e.g. OpenAI/DALL·E, Replicate, or fal) directly from the browser. Start with one
+  provider; make it swappable.
+- **Key handling (safe):** the API key is supplied **by the user** via a settings field,
+  stored only in `localStorage` (never in the repo, never sent to our server, never
+  hardcoded). Show a clear "Add your API key to enable images" empty state when no key
+  is present. Do **not** add any secret to the server or env.
+- **Prompt:** generate from the user's selected Future goals + a Prism-safe editorial
+  style (warm, grounded, no money/logos/luxury — matching the existing
+  `snapshotPrompt()` vibe). This prompt logic already exists in the old `app.js` —
+  reuse/port it.
+- **UX:** "Generate snapshot image" button → loading skeleton → rendered image in the
+  Snapshot card. Handle errors (bad key, rate limit, blocked) with friendly messages.
+- **Graceful fallback:** if no key is set, render a **local, non-AI illustration**
+  (CSS/SVG composition of the goals) so the card is never empty. This is the default
+  until the user opts into a provider.
+- **Constraints:** no new *server* routes; image calls go **browser → provider** only;
+  never log the key; respect the "no secrets to the extension/server" rule (AGENTS.md #12).
+
+
 - **API contracts unchanged**; two-product base only
   (`/api/core/growth`, `/api/future/invest`, `/api/future/content`, `/api/health`).
   **Do not reintroduce** the legacy routes (`/api/session/*`, `/api/life/simulate`,
@@ -94,6 +134,14 @@ Use **Vite + React + TypeScript**:
    flow works, theme toggle works, 320px width is usable, reduced-motion is calm.
 5. List changed files, commands/tests run, limitations, and any spec deviation in
    your commit message and a short note.
+
+## Animation & image-tool acceptance (verify these specifically)
+- Animations feel smooth (≈60fps), purposeful, and **fully disabled** under
+  `prefers-reduced-motion: reduce` (use DevTools rendering emulation to confirm).
+- Image tool: with a user-supplied key in settings, "Generate snapshot image" produces
+  a real image in the Snapshot card; with **no key**, the card shows the local
+  fallback illustration and a clear "add key to enable" prompt; invalid/blocked keys
+  show a friendly error (no crash). No key is ever written to the repo or server.
 
 ## Commit message format
 ```
