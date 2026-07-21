@@ -3,7 +3,7 @@ import { buildConceptMap, connectedConcepts } from './concept-map.js';
 import { DEFAULT_API_BASE, normalizeApiBase } from './config.js';
 import { redactSensitiveText } from './privacy.js';
 import { explainTerm } from './term-explanations.js';
-import { voicesForLanguage } from './speech-utils.js';
+import { chunkSpeechText, voicesForLanguage } from './speech-utils.js';
 import { classifyText, startSession, tutorQuizHtml, bindTutor } from './tutor.js';
 
 let apiBase = DEFAULT_API_BASE;
@@ -915,48 +915,93 @@ async function showListen() {
 function bindSpeech(copy) {
   const voiceSelect = document.querySelector('#listen-voice');
   const playButton = document.querySelector('#listen-play');
+  const status = document.querySelector('#voice-status');
   const targetLanguage = outputLanguage === 'source' ? (analysis?.language || pageSource?.language || page?.language || 'en') : outputLanguage;
   let matchingVoices = [];
+  let usedFallbackVoice = false;
+  let playbackId = 0;
   const loadVoices = () => {
-    matchingVoices = voicesForLanguage(speechSynthesis.getVoices(), targetLanguage);
+    const availableVoices = globalThis.speechSynthesis?.getVoices?.() ?? [];
+    const languageVoices = voicesForLanguage(availableVoices, targetLanguage);
+    usedFallbackVoice = languageVoices.length === 0 && availableVoices.length > 0;
+    matchingVoices = languageVoices.length ? languageVoices : availableVoices;
     voiceSelect.innerHTML = matchingVoices.length
       ? matchingVoices.map((voice, index) => `<option value="${index}">${esc(voice.name)} · ${esc(voice.lang)}</option>`).join('')
       : `<option value="">No ${esc(languageName(targetLanguage))} voice installed</option>`;
     voiceSelect.disabled = matchingVoices.length === 0;
     playButton.disabled = matchingVoices.length === 0;
-    if (!matchingVoices.length) document.querySelector('#voice-status').textContent = `Install a ${languageName(targetLanguage)} system voice to listen in this language.`;
+    if (!matchingVoices.length) status.textContent = 'Loading system voices…';
+    else if (usedFallbackVoice) status.textContent = `No ${languageName(targetLanguage)} voice is installed; using an available system voice.`;
+    else status.textContent = 'Ready.';
   };
   loadVoices();
-  speechSynthesis.addEventListener?.('voiceschanged', loadVoices, { once: true });
+  globalThis.speechSynthesis?.addEventListener?.('voiceschanged', loadVoices);
+  // Chrome may populate voices after the panel has loaded without sending a
+  // second event to this newly opened document. Retry briefly before leaving
+  // Play disabled.
+  let voiceRetries = 0;
+  const retryVoices = () => {
+    if (matchingVoices.length || voiceRetries++ >= 8) return;
+    loadVoices();
+    if (!matchingVoices.length) setTimeout(retryVoices, 250);
+  };
+  setTimeout(retryVoices, 100);
   playButton.onclick = () => {
-    speechSynthesis.cancel();
+    const synthesis = globalThis.speechSynthesis;
+    if (!synthesis || !matchingVoices.length) return;
+    playbackId += 1;
+    const thisPlayback = playbackId;
+    synthesis.cancel();
     const scope = document.querySelector('#listen-scope').value;
-    const utterance = new SpeechSynthesisUtterance(copy[scope]);
-    utterance.rate = Number(document.querySelector('#listen-rate').value);
-    utterance.lang = matchingVoices[Number(voiceSelect.value)]?.lang || targetLanguage;
-    utterance.voice = matchingVoices[Number(voiceSelect.value)] || null;
-    utterance.onstart = () => { document.querySelector('#voice-status').textContent = 'Playing…'; };
-    utterance.onend = () => { document.querySelector('#voice-status').textContent = 'Finished.'; };
-    speechSynthesis.speak(utterance);
+    const chunks = chunkSpeechText(copy[scope]);
+    const voice = matchingVoices[Number(voiceSelect.value)] || matchingVoices[0];
+    if (!chunks.length) { status.textContent = 'There is no readable text on this page.'; return; }
+    const speakChunk = (index) => {
+      if (thisPlayback !== playbackId) return;
+      const utterance = new SpeechSynthesisUtterance(chunks[index]);
+      utterance.rate = Number(document.querySelector('#listen-rate').value);
+      utterance.lang = voice?.lang || targetLanguage;
+      utterance.voice = voice || null;
+      utterance.onstart = () => { status.textContent = `Playing… ${index + 1}/${chunks.length}`; };
+      utterance.onend = () => {
+        if (thisPlayback !== playbackId) return;
+        if (index + 1 < chunks.length) speakChunk(index + 1);
+        else status.textContent = 'Finished.';
+      };
+      utterance.onerror = () => { if (thisPlayback === playbackId) status.textContent = 'Browser voice playback failed. Try another voice.'; };
+      synthesis.speak(utterance);
+    };
+    speakChunk(0);
   };
-  document.querySelector('#listen-pause').onclick = () => {
-    if (!geminiAudio.paused) { geminiAudio.pause(); document.querySelector('#voice-status').textContent = 'Paused.'; return; }
-    if (geminiAudio.src && geminiAudio.currentTime > 0 && geminiAudio.currentTime < geminiAudio.duration) { geminiAudio.play(); return; }
-    if (speechSynthesis.paused) { speechSynthesis.resume(); document.querySelector('#voice-status').textContent = 'Playing…'; }
-    else { speechSynthesis.pause(); document.querySelector('#voice-status').textContent = 'Paused.'; }
-  };
-  document.querySelector('#listen-stop').onclick = () => { speechSynthesis.cancel(); geminiAudio.pause(); document.querySelector('#voice-status').textContent = 'Stopped.'; };
-
-  // Server-generated narration via Gemini TTS. Additive: browser speech above
-  // stays the default and the fallback. Plays the returned data URL directly,
-  // so no audio bytes are stored anywhere.
+  // Server-generated narration is optional; browser speech remains the
+  // dependable fallback when no server voice is configured.
   const geminiAudio = new Audio();
-  geminiAudio.onended = () => { document.querySelector('#voice-status').textContent = 'Finished.'; };
-  geminiAudio.onplay = () => { document.querySelector('#voice-status').textContent = 'Playing (Gemini voice)…'; };
-  const status = document.querySelector('#voice-status');
+  geminiAudio.onended = () => { status.textContent = 'Finished.'; };
+  geminiAudio.onplay = () => { status.textContent = 'Playing (Gemini voice)…'; };
+  geminiAudio.onerror = () => { status.textContent = 'Generated voice playback failed. Try the browser voice.'; };
+  document.querySelector('#listen-pause').onclick = () => {
+    if (!geminiAudio.paused) { geminiAudio.pause(); status.textContent = 'Paused.'; return; }
+    if (geminiAudio.src && geminiAudio.currentTime > 0 && geminiAudio.currentTime < geminiAudio.duration) {
+      void geminiAudio.play();
+      return;
+    }
+    const synthesis = globalThis.speechSynthesis;
+    if (!synthesis) return;
+    if (synthesis.paused) { synthesis.resume(); status.textContent = 'Playing…'; }
+    else { synthesis.pause(); status.textContent = 'Paused.'; }
+  };
+  document.querySelector('#listen-stop').onclick = () => {
+    playbackId += 1;
+    globalThis.speechSynthesis?.cancel();
+    geminiAudio.pause();
+    geminiAudio.currentTime = 0;
+    status.textContent = 'Stopped.';
+  };
   document.querySelector('#listen-gemini').onclick = async (event) => {
     const button = event.currentTarget;
-    speechSynthesis.cancel();
+    playbackId += 1;
+    globalThis.speechSynthesis?.cancel();
+    geminiAudio.pause();
     const scope = document.querySelector('#listen-scope').value;
     button.disabled = true;
     status.textContent = 'Generating Gemini narration…';
