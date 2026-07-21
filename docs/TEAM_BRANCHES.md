@@ -4,12 +4,10 @@
 
 | Branch | Workstream |
 | --- | --- |
-| `codex/improvement` | Prism Core, Prism Future, curriculum UX, integration polish |
+| `david/chassis` | Prism Core, Prism Future, curriculum UX, integration chassis |
 | `hermes/base` | Base implementation, deterministic calculations, regression fixes |
-| `backend/generation-hardening` | Generation service, validation, provider boundary |
-| `prism-hero` | Web hero and Chrome-extension workflow |
-| `prism-theme` | Shared visual theme (already included in `prism-hero`) |
-| `landing-page` | Standalone launch and pitch page |
+| `rohan/frontend-ui` | Web hero, shared theme, Chrome-extension workflow, landing page |
+| `joanne/backend` | Generation service, validation, provider boundary |
 | `develop` | Tested merge of active workstreams |
 | `main` | Stable, presentation-ready releases only |
 
