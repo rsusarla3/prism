@@ -3,7 +3,7 @@ import { mkdirSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import type { DatabaseSync as DatabaseSyncType } from 'node:sqlite';
-import type { CapturedSource, CapturedSourceInput, LearningAsset, LearningAssetKind, LearningAssetPayload, LearningMaterial, StudyBundle } from 'prism-shared';
+import type { CapturedSource, CapturedSourceInput, FigureAsset, LearningAsset, LearningAssetKind, LearningAssetPayload, LearningMaterial, StudyBundle } from 'prism-shared';
 
 const require = createRequire(import.meta.url);
 const { DatabaseSync } = require('node:sqlite') as typeof import('node:sqlite');
@@ -34,6 +34,19 @@ interface AssetRow {
   source_url: string;
   kind: LearningAssetKind;
   payload_json: string;
+  created_at: string;
+}
+
+interface FigureRow {
+  id: string;
+  source_id: string;
+  source_title: string;
+  source_url: string;
+  mime_type: FigureAsset['mimeType'];
+  data_base64: string;
+  alt_text: string;
+  model: string;
+  prompt_version: string;
   created_at: string;
 }
 
@@ -70,6 +83,17 @@ export class SourceStore {
         created_at TEXT NOT NULL,
         UNIQUE(source_id, kind)
       );
+      CREATE TABLE IF NOT EXISTS figure_assets (
+        id TEXT PRIMARY KEY,
+        source_id TEXT NOT NULL REFERENCES sources(id) ON DELETE CASCADE,
+        mime_type TEXT NOT NULL CHECK(mime_type IN ('image/png', 'image/jpeg', 'image/webp')),
+        data_base64 TEXT NOT NULL,
+        alt_text TEXT NOT NULL,
+        model TEXT NOT NULL,
+        prompt_version TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        UNIQUE(source_id, model, prompt_version)
+      );
     `);
   }
 
@@ -85,6 +109,7 @@ export class SourceStore {
     `);
     const find = this.db.prepare('SELECT * FROM sources WHERE url = ?');
     const clearAssets = this.db.prepare('DELETE FROM learning_assets WHERE source_id = ?');
+    const clearFigures = this.db.prepare('DELETE FROM figure_assets WHERE source_id = ?');
     const now = new Date().toISOString();
     const saved: CapturedSource[] = [];
     this.db.exec('BEGIN');
@@ -93,7 +118,10 @@ export class SourceStore {
         const id = `src_${createHash('sha256').update(input.url).digest('hex').slice(0, 20)}`;
         const existing = find.get(input.url) as unknown as SourceRow | undefined;
         upsert.run(id, input.url, input.title, input.text, input.capturedAt, now, now);
-        if (existing && existing.text !== input.text) clearAssets.run(id);
+        if (existing && existing.text !== input.text) {
+          clearAssets.run(id);
+          clearFigures.run(id);
+        }
         saved.push(toSource(find.get(input.url) as unknown as SourceRow));
       }
       this.db.exec('COMMIT');
@@ -151,6 +179,33 @@ export class SourceStore {
     return { id, sourceId: source.id, sourceTitle: source.title, sourceUrl: source.url, kind, payload, createdAt, cached: false };
   }
 
+  getFigureAsset(sourceId: string, model: string, promptVersion: string): FigureAsset | null {
+    const row = this.db.prepare(`
+      SELECT f.id, f.source_id, s.title AS source_title, s.url AS source_url,
+        f.mime_type, f.data_base64, f.alt_text, f.model, f.prompt_version, f.created_at
+      FROM figure_assets f JOIN sources s ON s.id = f.source_id
+      WHERE f.source_id = ? AND f.model = ? AND f.prompt_version = ?
+    `).get(sourceId, model, promptVersion) as unknown as FigureRow | undefined;
+    return row ? toFigure(row, true) : null;
+  }
+
+  saveFigureAsset(source: CapturedSource, figure: Pick<FigureAsset, 'mimeType' | 'altText' | 'model' | 'promptVersion'> & { dataBase64: string }): FigureAsset {
+    const id = `figure_${source.id}_${createHash('sha256').update(`${figure.model}:${figure.promptVersion}`).digest('hex').slice(0, 12)}`;
+    const createdAt = new Date().toISOString();
+    this.db.prepare(`
+      INSERT INTO figure_assets (id, source_id, mime_type, data_base64, alt_text, model, prompt_version, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(source_id, model, prompt_version) DO UPDATE SET
+        mime_type = excluded.mime_type,
+        data_base64 = excluded.data_base64,
+        alt_text = excluded.alt_text,
+        created_at = excluded.created_at
+    `).run(id, source.id, figure.mimeType, figure.dataBase64, figure.altText, figure.model, figure.promptVersion, createdAt);
+    const saved = this.getFigureAsset(source.id, figure.model, figure.promptVersion);
+    if (!saved) throw new Error('Generated figure could not be saved.');
+    return { ...saved, cached: false };
+  }
+
   close() {
     this.db.close();
   }
@@ -187,6 +242,23 @@ function toAsset(row: AssetRow, cached: boolean): LearningAsset {
     sourceUrl: row.source_url,
     kind: row.kind,
     payload: JSON.parse(row.payload_json) as LearningAssetPayload,
+    createdAt: row.created_at,
+    cached,
+  };
+}
+
+
+function toFigure(row: FigureRow, cached: boolean): FigureAsset {
+  return {
+    id: row.id,
+    sourceId: row.source_id,
+    sourceTitle: row.source_title,
+    sourceUrl: row.source_url,
+    mimeType: row.mime_type,
+    dataUrl: `data:${row.mime_type};base64,${row.data_base64}`,
+    altText: row.alt_text,
+    model: row.model,
+    promptVersion: row.prompt_version,
     createdAt: row.created_at,
     cached,
   };
