@@ -40,6 +40,74 @@ Say instead: **"multiple modalities, for every learner."**
 
 ---
 
+## What the principles actually mean
+
+Don't cite a principle you can't explain. Each of these is a specific, testable
+claim — here's what it says and what it means for Prism.
+
+### The theory underneath (Paivio → Mayer)
+
+| Term | What it actually claims |
+|---|---|
+| **Dual coding** (Paivio) | The mind has **two separate systems** — one for verbal/linguistic info, one for visual/imaginal. Content encoded in *both* gets two retrieval routes, so it's remembered better than content encoded in one. |
+| **Dual-channel assumption** | Mayer's version: people process pictures through a **visual channel** and spoken words through an **auditory channel**, and the two run somewhat independently. |
+| **Limited capacity** | Each channel can only hold **a few elements at once** (working-memory limits). Overload one channel and learning drops. |
+| **Active processing** | Learning isn't absorption — the learner must **select** relevant bits, **organize** them into a structure, and **integrate** them with prior knowledge. Passive exposure isn't enough. |
+| **Cognitive load** | Mental effort splits into *intrinsic* (the material's inherent difficulty), *extraneous* (wasted effort from bad design), and *germane* (effort that builds understanding). Good design **cuts extraneous load** so capacity goes to germane. |
+
+### Mayer's design principles (the ones we invoke)
+
+| Principle | The claim, plainly | What it justifies in Prism |
+|---|---|---|
+| **Multimedia effect** (g=0.68) | People learn better from **words + pictures** than words alone. | The animated/captioned visuals and charts, rather than text-only. |
+| **Modality principle** (g=0.82) | With a graphic, people learn better from **spoken narration** than from on-screen text — because speech uses the *auditory* channel, leaving the visual channel free for the graphic instead of making the eyes do two jobs. | Narrating content instead of stacking more text on screen. **Our largest effect size.** |
+| **Redundancy principle** (g=0.14) | Adding **on-screen text that duplicates the narration** *on top of* a graphic tends to hurt — the eyes split between picture and text. | ⚠️ The one that appears to argue *against* karaoke — see below. |
+| **Spatial contiguity** | Put related words and pictures **near each other** in space, not separated. | Captions sit on the animation, not in a legend below it. |
+| **Temporal contiguity** | Present narration and its matching visual **at the same time**, not one then the other. | Word highlighting fires in sync with the spoken word. |
+| **Segmenting** | Break content into **learner-paced chunks** instead of one continuous stream. | Per-paragraph recaps and the stepped flow. |
+| **Signaling** | **Cue the essential material** (highlight, arrow, bold) so attention lands in the right place. | The moving karaoke highlight is textbook signaling. |
+| **Coherence** (g=1.00) | **Remove interesting-but-irrelevant** material ("seductive details") — it competes for capacity. Largest effect in the meta. | Keep lessons tight; resist decorative extras. |
+| **Personalization** (g=0.70) | **Conversational** wording ("you," "your") beats formal lecture tone. | The plain-English recap voice. |
+
+### The counter-argument to expect — and our answer
+
+A sharp reviewer may say: *"The redundancy principle says showing text while
+narrating the same words hurts learning. Doesn't karaoke violate Mayer?"*
+
+**Answer:** No — redundancy's harm is conditional, and our case sits in the
+documented exceptions:
+
+1. **There's no competing graphic.** Redundancy hurts when text steals the visual channel away from a *picture*. In our reading step the text **is** the object of study; nothing competes.
+2. **The text is synchronized and signaled.** The highlight tells the eye exactly where to be, which removes the visual-search cost that drives the redundancy effect.
+3. **It's the smallest effect in the meta** — redundancy g=0.14 vs modality g=0.82 and multimedia g=0.68. Weak and boundary-dependent.
+4. **Direct evidence supports our version.** Gerbier et al. (2018) tested synchronized word highlighting specifically and found *more fluent* eye movements and better verbal learning — and reading-while-listening beats listening-only (Hui et al. 2024).
+5. **Our learners are exactly the exception group.** Redundancy reverses (text + speech *helps*) for developing readers, low prior knowledge, and non-native speakers — i.e., K-12 and ELL.
+
+Short version: **narration + synced text on a page of prose is supported; narration + duplicate text pasted over a busy animation is what Mayer warns against.** We do the first.
+
+### How to read the effect sizes
+
+Effect size = how big the difference is, in standard deviations. **Cohen's d** and
+**Hedges g** are near-identical (g corrects for small samples).
+
+| Value | Conventional label | Plain meaning |
+|---|---|---|
+| 0.2 | small | noticeable in aggregate, not to the eye |
+| 0.5 | medium | a visible difference in a classroom |
+| 0.8 | large | a substantial jump |
+
+Useful translation for the pitch: **g = 0.60** (our K-12 reading number) means the
+average tutored student scored higher than about **73%** of untutored students.
+Kulik & Fletcher's **+0.66 SD** is the same idea stated directly — a median student
+moves from the **50th to roughly the 75th percentile**.
+
+⚠️ Two honesty notes: effect sizes shrink on **standardized** tests versus
+researcher-made ones, and education meta-analyses skew optimistic
+(publication bias). Quote these as *evidence of direction and rough magnitude*,
+not as a promise of what Prism will deliver.
+
+---
+
 ## Feature → evidence map
 
 ### Reading + vocabulary glossing (tap for definition)
