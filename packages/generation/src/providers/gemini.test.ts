@@ -25,17 +25,20 @@ describe('createGeminiClient', () => {
     });
 
     const client = createGeminiClient({ apiKey: 'test-key' });
-    await client.complete({ system: 'be helpful', user: 'do the thing' });
+    const schema = { type: 'object' };
+    await client.complete({ system: 'be helpful', user: 'do the thing', schema });
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
     expect(url).toContain(DEFAULT_GEMINI_MODEL);
-    expect(url).toContain('key=test-key');
+    expect(url).not.toContain('test-key');
+    expect((init.headers as Record<string, string>)['x-goog-api-key']).toBe('test-key');
 
     const body = JSON.parse(init.body as string);
     expect(body.systemInstruction.parts[0].text).toBe('be helpful');
     expect(body.contents[0].parts[0].text).toBe('do the thing');
     expect(body.generationConfig.responseMimeType).toBe('application/json');
+    expect(body.generationConfig.responseJsonSchema).toEqual(schema);
   });
 
   it('uses a custom model when provided', async () => {
