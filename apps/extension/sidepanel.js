@@ -769,7 +769,7 @@ function renderAiVisual(map, figure, translationNote = '') {
     <div class="figure-panel local-panel" id="local-figure-panel" hidden>${localVisualMarkup(map)}</div>
     <div class="segmented figure-switch" role="group" aria-label="Visualization type"><button class="active" data-figure-view="ai">AI figure</button><button data-figure-view="local">Evidence map</button></div>
     <p class="figure-caption">The full figure fits the panel automatically. Use 150% or 200% when you want to inspect details.</p>
-    <div class="figure-actions"><button class="fig" id="download-figure">Download PNG</button><button class="fig" id="regenerate-figure">Regenerate (~$0.039)</button></div>`, translationNote || 'The Gemini key stays on the Prism server. Bright image backgrounds are adapted to Prism automatically.');
+    <div class="figure-actions"><button class="fig" id="download-figure">Download PNG</button><button class="fig" id="regenerate-figure">Regenerate</button></div>`, translationNote || 'The Gemini key stays on the Prism server. Bright image backgrounds are adapted to Prism automatically.');
   bindConceptMap(map);
   const image = document.querySelector('.ai-figure');
   if (image.complete) adaptFigureBackground(image);
@@ -788,7 +788,7 @@ function renderAiVisual(map, figure, translationNote = '') {
   }));
   document.querySelector('#download-figure')?.addEventListener('click', () => downloadDataUrl(figure.dataUrl, figure.mimeType));
   document.querySelector('#regenerate-figure')?.addEventListener('click', async (event) => {
-    if (!confirm('Generate a new image? This makes a paid Gemini request (about $0.039 at current pricing).')) return;
+    if (!confirm('Generate a new image?')) return;
     const button = event.currentTarget;
     button.disabled = true;
     button.textContent = 'Regenerating…';
@@ -797,7 +797,7 @@ function renderAiVisual(map, figure, translationNote = '') {
       renderAiVisual(map, replacement, translationNote);
     } catch (error) {
       button.disabled = false;
-      button.textContent = 'Regenerate (~$0.039)';
+      button.textContent = 'Regenerate';
       alert(`Could not regenerate the figure. ${truncate(error?.message || '', 160)}`);
     }
   });
