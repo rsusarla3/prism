@@ -1,4 +1,4 @@
-import type { StudyBundle } from 'prism-shared';
+import type { LearningAssetKind, StudyBundle } from 'prism-shared';
 
 export interface ValidationIssue {
   path: string;
@@ -144,11 +144,9 @@ export function checkNarrationCoversSegments(bundle: StudyBundle): ValidationIss
     : [issue('listen.segmentIndex', 'listen-must-cover-segments', `Narration must reference every read segment; segment(s) ${missing.join(', ')} are uncovered.`)];
 }
 
-/** Glossing carries a measured vocabulary benefit, so a bundle with none wastes the Read stage. */
+/** Keep included glosses concise without forcing jargon into a simple passage. */
 export function checkGlosses(bundle: StudyBundle): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
-  const total = bundle.read.segments.reduce((sum, segment) => sum + segment.glosses.length, 0);
-  if (total === 0) issues.push(issue('read.segments', 'gloss-required', 'At least one term must be glossed.'));
   bundle.read.segments.forEach((segment, i) => segment.glosses.forEach((gloss, j) => {
     const words = gloss.definition.trim().split(/\s+/).filter(Boolean).length;
     if (words > MAX_GLOSS_WORDS) {
@@ -177,6 +175,98 @@ export function validateStudyBundle(value: unknown, sourceText = ''): Validation
   const bundle = value as StudyBundle;
   const issues = [...CHECKS.flatMap((check) => check(bundle)), ...checkNumberProvenance(bundle, sourceText)];
   return { valid: issues.length === 0, issues };
+}
+
+/** Validates one lazily generated UI asset without requiring all five assets. */
+export function validateLearningAsset(kind: LearningAssetKind, value: unknown, sourceText: string): ValidationResult {
+  if (!isRecord(value)) return { valid: false, issues: [issue('', 'asset-object-required', 'The generated asset must be an object.')] };
+  const issues: ValidationIssue[] = [];
+  if (kind === 'read') validateReadAsset(value, issues);
+  if (kind === 'listen') validateListenAsset(value, issues);
+  if (kind === 'watch') validateWatchAsset(value, issues);
+  if (kind === 'explore') validateExploreAsset(value, issues);
+  if (kind === 'quiz') validateQuizAsset(value, issues);
+  if (issues.length === 0) issues.push(...checkAssetNumberProvenance(kind, value, sourceText));
+  return { valid: issues.length === 0, issues };
+}
+
+function validateReadAsset(value: Record<string, unknown>, issues: ValidationIssue[]) {
+  const segments = arrayAt(value, 'segments', '', issues);
+  if (!segments || segments.length === 0) { if (segments) issues.push(issue('segments', 'read-segments-non-empty', 'segments must be non-empty.')); return; }
+  segments.forEach((segment, index) => {
+    if (!isRecord(segment)) return issues.push(typeIssue(`segments[${index}]`, 'object'));
+    strings(segment, ['text', 'recap'], `segments[${index}]`, issues);
+    const glosses = arrayAt(segment, 'glosses', `segments[${index}]`, issues);
+    glosses?.forEach((gloss, glossIndex) => {
+      if (!isRecord(gloss)) return issues.push(typeIssue(`segments[${index}].glosses[${glossIndex}]`, 'object'));
+      strings(gloss, ['term', 'definition'], `segments[${index}].glosses[${glossIndex}]`, issues);
+    });
+  });
+}
+
+function validateListenAsset(value: Record<string, unknown>, issues: ValidationIssue[]) {
+  strings(value, ['script'], '', issues);
+  if (typeof value.highlightLeadMs !== 'number' || value.highlightLeadMs !== 300) issues.push(issue('highlightLeadMs', 'listen-highlight-lead-ms-valid', 'highlightLeadMs must equal 300.'));
+  const indexes = arrayAt(value, 'segmentIndex', '', issues);
+  indexes?.forEach((entry, index) => { if (!Number.isInteger(entry) || (entry as number) < 0) issues.push(typeIssue(`segmentIndex[${index}]`, 'non-negative integer')); });
+}
+
+function validateWatchAsset(value: Record<string, unknown>, issues: ValidationIssue[]) {
+  if (value.kind !== 'diagram' && value.kind !== 'sequence') issues.push(issue('kind', 'invalid-watch-kind', 'kind must be diagram or sequence.'));
+  if (typeof value.altText !== 'string' || !value.altText.trim()) issues.push(issue('altText', 'watch-alt-text-required', 'altText must be non-empty.'));
+  const steps = arrayAt(value, 'steps', '', issues);
+  if (!steps || steps.length === 0) { if (steps) issues.push(issue('steps', 'watch-steps-non-empty', 'steps must be non-empty.')); return; }
+  steps.forEach((step, index) => { if (!isRecord(step)) issues.push(typeIssue(`steps[${index}]`, 'object')); else strings(step, ['caption', 'description'], `steps[${index}]`, issues); });
+}
+
+function validateExploreAsset(value: Record<string, unknown>, issues: ValidationIssue[]) {
+  if (value.timeline === undefined && value.data === undefined) issues.push(issue('', 'explore-content-required', 'explore requires timeline and/or data.'));
+  checkExploreStructure(value, issues);
+  if (isRecord(value.data) && Array.isArray(value.data.series)) value.data.series.forEach((series, index) => {
+    if (isRecord(series) && Array.isArray(series.points)) series.points.forEach((point, pointIndex) => {
+      if (isRecord(point) && !Number.isFinite(point.y)) issues.push(issue(`data.series[${index}].points[${pointIndex}].y`, 'explore-data-point-finite', 'y must be finite.'));
+    });
+  });
+}
+
+function validateQuizAsset(value: Record<string, unknown>, issues: ValidationIssue[]) {
+  const items = arrayAt(value, 'items', '', issues);
+  if (!items || items.length === 0) { if (items) issues.push(issue('items', 'quiz-items-non-empty', 'items must be non-empty.')); return; }
+  let hasTransfer = false;
+  items.forEach((item, index) => {
+    if (!isRecord(item)) return issues.push(typeIssue(`items[${index}]`, 'object'));
+    strings(item, ['kind', 'stem', 'explanation'], `items[${index}]`, issues);
+    if (item.kind === 'transfer') hasTransfer = true;
+    if (item.kind !== 'recall' && item.kind !== 'transfer') issues.push(issue(`items[${index}].kind`, 'invalid-quiz-kind', 'kind must be recall or transfer.'));
+    const options = arrayAt(item, 'options', `items[${index}]`, issues);
+    if (!options || options.length < 2) { if (options) issues.push(issue(`items[${index}].options`, 'quiz-item-min-two-options', 'Each item needs two options.')); return; }
+    let correct = 0;
+    options.forEach((option, optionIndex) => {
+      if (!isRecord(option)) return issues.push(typeIssue(`items[${index}].options[${optionIndex}]`, 'object'));
+      strings(option, ['text', 'feedback'], `items[${index}].options[${optionIndex}]`, issues);
+      if (typeof option.correct !== 'boolean') issues.push(typeIssue(`items[${index}].options[${optionIndex}].correct`, 'boolean'));
+      if (option.correct === true) correct++;
+      if (typeof option.feedback === 'string' && !option.feedback.trim()) issues.push(issue(`items[${index}].options[${optionIndex}].feedback`, 'quiz-option-feedback-required', 'Every option needs feedback.'));
+    });
+    if (correct !== 1) issues.push(issue(`items[${index}].options`, 'quiz-item-exactly-one-correct', 'Each item must have exactly one correct option.'));
+  });
+  if (!hasTransfer) issues.push(issue('items', 'quiz-transfer-item-required', 'At least one transfer item is required.'));
+}
+
+function checkAssetNumberProvenance(kind: LearningAssetKind, value: Record<string, unknown>, sourceText: string): ValidationIssue[] {
+  const visible: Array<[string, string | number]> = [];
+  if (kind === 'read' && Array.isArray(value.segments)) value.segments.forEach((segment, i) => {
+    if (isRecord(segment)) { visible.push([`segments[${i}].text`, String(segment.text ?? '')], [`segments[${i}].recap`, String(segment.recap ?? '')]); }
+  });
+  if (kind === 'listen') visible.push(['script', String(value.script ?? '')]);
+  if (kind === 'watch') { visible.push(['altText', String(value.altText ?? '')]); if (Array.isArray(value.steps)) value.steps.forEach((step, i) => { if (isRecord(step)) visible.push([`steps[${i}].caption`, String(step.caption ?? '')], [`steps[${i}].description`, String(step.description ?? '')]); }); }
+  if (kind === 'explore') {
+    if (Array.isArray(value.timeline)) value.timeline.forEach((entry, i) => { if (isRecord(entry)) visible.push([`timeline[${i}].label`, String(entry.label ?? '')], [`timeline[${i}].detail`, String(entry.detail ?? '')]); });
+    if (isRecord(value.data)) { visible.push(['data.caption', String(value.data.caption ?? '')]); if (Array.isArray(value.data.series)) value.data.series.forEach((series, i) => { if (isRecord(series) && Array.isArray(series.points)) series.points.forEach((point, j) => { if (isRecord(point)) visible.push([`data.series[${i}].points[${j}].x`, String(point.x ?? '')], [`data.series[${i}].points[${j}].y`, Number(point.y)]); }); }); }
+  }
+  if (kind === 'quiz' && Array.isArray(value.items)) value.items.forEach((item, i) => { if (isRecord(item)) { visible.push([`items[${i}].stem`, String(item.stem ?? '')], [`items[${i}].explanation`, String(item.explanation ?? '')]); if (Array.isArray(item.options)) item.options.forEach((option, j) => { if (isRecord(option)) visible.push([`items[${i}].options[${j}].text`, String(option.text ?? '')], [`items[${i}].options[${j}].feedback`, String(option.feedback ?? '')]); }); } });
+  const sourceNumbers = new Set(extractNumbers(sourceText));
+  return visible.flatMap(([path, text]) => extractNumbers(String(text)).filter((number) => !sourceNumbers.has(number)).map((number) => issue(path, 'number-source-required', `Number ${number} does not appear in the source text.`)));
 }
 
 function checkStructure(value: unknown): ValidationIssue[] {

@@ -224,3 +224,9 @@ node_modules/
 dist/
 *.tsbuildinfo
 .DS_Store
+data/*.sqlite
+data/*.sqlite-shm
+data/*.sqlite-wal
+.env
+.env.*
+!.env.example

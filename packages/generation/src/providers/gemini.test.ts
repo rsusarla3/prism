@@ -67,4 +67,21 @@ describe('createGeminiClient', () => {
     const client = createGeminiClient({ apiKey: 'k' });
     await expect(client.complete({ system: 's', user: 'u' })).rejects.toThrow(/text content/);
   });
+
+  it('reports a useful provider error when the network request fails', async () => {
+    const error = Object.assign(new TypeError('fetch failed'), { cause: new Error('socket closed') });
+    vi.stubGlobal('fetch', vi.fn(async () => { throw error; }));
+    const client = createGeminiClient({ apiKey: 'k' });
+    await expect(client.complete({ system: 's', user: 'u' })).rejects.toThrow(/Could not reach Gemini's API after 3 attempts \(socket closed\)/);
+  });
+
+  it('retries a temporary 503 response', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: false, status: 503, statusText: 'Unavailable', text: async () => 'busy' })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ candidates: [{ content: { parts: [{ text: '{"ok":true}' }] } }] }) });
+    vi.stubGlobal('fetch', fetchMock);
+    const client = createGeminiClient({ apiKey: 'k' });
+    await expect(client.complete({ system: 's', user: 'u' })).resolves.toBe('{"ok":true}');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
 });

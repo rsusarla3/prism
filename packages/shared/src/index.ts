@@ -509,6 +509,65 @@ export interface StudyBundle {
 }
 
 // ---------------------------------------------------------------------------
+// Captured source library — explicit browser capture -> persisted lesson input
+// ---------------------------------------------------------------------------
+
+export interface CapturedSourceInput {
+  url: string;
+  title: string;
+  text: string;
+  capturedAt: string;
+}
+
+export interface CapturedSource extends CapturedSourceInput {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CaptureSourcesRequest {
+  sources: CapturedSourceInput[];
+}
+
+export interface CaptureSourcesResponse {
+  sources: CapturedSource[];
+}
+
+export interface GenerateStoredSourceRequest {
+  targetGrade?: number;
+  homeLanguage?: string;
+}
+
+export interface LearningMaterial {
+  id: string;
+  sourceId: string;
+  sourceTitle: string;
+  sourceUrl: string;
+  bundle: StudyBundle;
+  createdAt: string;
+}
+
+export type LearningAssetKind = 'read' | 'listen' | 'watch' | 'explore' | 'quiz';
+
+export type LearningAssetPayload =
+  | StudyBundle['read']
+  | StudyBundle['listen']
+  | StudyBundle['watch']
+  | StudyBundle['explore']
+  | StudyBundle['quiz'];
+
+export interface LearningAsset {
+  id: string;
+  sourceId: string;
+  sourceTitle: string;
+  sourceUrl: string;
+  kind: LearningAssetKind;
+  payload: LearningAssetPayload;
+  createdAt: string;
+  cached: boolean;
+}
+
+// ---------------------------------------------------------------------------
 // Input sanitization (shared, deterministic)
 // ---------------------------------------------------------------------------
 
