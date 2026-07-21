@@ -16,6 +16,7 @@ import path from 'node:path';
 import os from 'node:os';
 
 import { parseFiniteAll } from 'prism-shared';
+import type { StudyBundle } from 'prism-shared';
 import {
   compareGrowth,
   projectInvestment,
@@ -25,7 +26,7 @@ import {
   SUGGESTED_KEYWORDS,
   FUTURE_GOALS,
 } from 'prism-verifiers';
-import { generateStudyBundle, createGeminiClient, prepareGenerateRequest, type LLMClient } from 'prism-generation';
+import { generateStudyBundle, createGeminiClient, prepareGenerateRequest, attachMedia, createGeminiSpeechClient, type LLMClient } from 'prism-generation';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
@@ -107,6 +108,28 @@ const llmClient: LLMClient | null = geminiApiKey
   ? createGeminiClient({ apiKey: geminiApiKey, model: process.env.GEMINI_MODEL || undefined })
   : null;
 
+// Media is a second, optional pass. Kept as its own route so the study bundle
+// still returns as soon as it is ready: the client paints text immediately and
+// asks for audio afterwards, instead of blocking the whole lesson on TTS.
+const speechClient = geminiApiKey
+  ? createGeminiSpeechClient({ apiKey: geminiApiKey, model: process.env.GEMINI_SPEECH_MODEL || undefined, voice: process.env.GEMINI_VOICE || undefined })
+  : null;
+
+async function handleMedia(body: unknown) {
+  if (!speechClient) {
+    throw Object.assign(new Error('No speech provider configured yet.'), { status: 501 });
+  }
+  if (!isRecord(body) || !isRecord(body.bundle)) {
+    throw Object.assign(new Error('bundle is required.'), { status: 400 });
+  }
+  const { bundle, failures } = await attachMedia(body.bundle as unknown as StudyBundle, { speech: speechClient });
+  return { bundle, failures };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 async function handleGenerate(body: unknown) {
   const request = prepareGenerateRequest(body);
   if (!llmClient) {
@@ -167,6 +190,9 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'POST' && url.pathname === '/api/generate') {
       return send(res, 200, await handleGenerate(await readBody<unknown>(req)));
+    }
+    if (req.method === 'POST' && url.pathname === '/api/generate/media') {
+      return send(res, 200, await handleMedia(await readBody<unknown>(req)));
     }
     send(res, 404, { error: 'Not found' });
   } catch (e) {
