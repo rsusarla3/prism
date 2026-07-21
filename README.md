@@ -78,6 +78,10 @@ recorded. The model also never selects a modality to match a learner's supposed
 style; every learner receives every modality, because modality matching is not
 supported by the evidence.
 
+The backend contract for steps 2 and 3 — raw text in, validated study bundle out
+— is specified in
+[`docs/prism/GENERATION_SPEC.md`](docs/prism/GENERATION_SPEC.md).
+
 ### Current runtime
 
 ```mermaid
