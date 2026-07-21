@@ -27,10 +27,10 @@ export default function Future() {
   }, [profile]);
   useEffect(() => { heading.current?.focus(); }, [step]);
 
-  const choose = (label: string) => setGoals(old => old.includes(label) ? old.filter(x => x !== label) : old.length < 5 ? [...old, label] : old);
+  const choose = (label: string) => setGoals(old => old.includes(label) ? old.filter(x => x !== label) : [...old, label]);
   const addCustom = () => {
     const value = custom.trim();
-    if (value && goals.length < 5 && !goals.includes(value)) { setGoals([...goals, value]); setCustom(''); }
+    if (value && !goals.includes(value)) { setGoals([...goals, value]); setCustom(''); }
   };
   const toggle = (name: string) => setOverlays(old => {
     const next = new Set(old); next.has(name) ? next.delete(name) : next.add(name); return next;
@@ -64,26 +64,30 @@ export default function Future() {
 }
 
 function GoalCanvas({ content, goals, custom, setCustom, choose, addCustom, next, heading }: { content: Content | null; goals: string[]; custom: string; setCustom: (value: string) => void; choose: (label: string) => void; addCustom: () => void; next: () => void; heading: React.RefObject<HTMLHeadingElement | null> }) {
-  return <article className="goal-stage"><div className="goal-orb orb-one" /><div className="goal-orb orb-two" /><div className="goal-heading"><div><span className="step-label">Pick 3–5</span><h1 ref={heading} tabIndex={-1}>What should money make possible?</h1></div><span className={`goal-count ${goals.length >= 3 ? 'ready' : ''}`} aria-live="polite">{goals.length}<small>/5</small></span></div>
+  return <article className="goal-stage"><div className="goal-orb orb-one" /><div className="goal-orb orb-two" /><div className="goal-heading"><div><span className="step-label">Pick any that matter</span><h1 ref={heading} tabIndex={-1}>What should money make possible?</h1></div><span className={`goal-count ${goals.length >= 1 ? 'ready' : ''}`} aria-live="polite">{goals.length}<small> picked</small></span></div>
     {!content ? <Skeleton /> : <div className="goal-wall">{content.futureGoals.map((g, i) => <button style={{ '--i': i } as React.CSSProperties} data-category={g.category} aria-pressed={goals.includes(g.label)} className={goals.includes(g.label) ? 'selected' : ''} onClick={() => choose(g.label)} key={g.id}><span>{goalIcon(g.category)}</span><b>{g.label}</b><i>{goals.includes(g.label) ? '✓' : '+'}</i></button>)}</div>}
-    <div className="goal-dock"><div className="custom-goal"><input aria-label="Add your own future goal" value={custom} onChange={e => setCustom(e.target.value)} onKeyDown={e => e.key === 'Enter' && addCustom()} placeholder="Add your own…" maxLength={36} /><button onClick={addCustom} aria-label="Add custom goal">+</button></div><div className="goal-progress" aria-hidden="true">{[0, 1, 2, 3, 4].map(i => <i className={i < goals.length ? 'filled' : ''} key={i} />)}</div><button className="primary goal-continue" disabled={goals.length < 3} onClick={next}>{goals.length < 3 ? `${3 - goals.length} more` : 'Make it real'} <span>→</span></button></div>
+    <div className="goal-dock"><div className="custom-goal"><input aria-label="Add your own future goal" value={custom} onChange={e => setCustom(e.target.value)} onKeyDown={e => e.key === 'Enter' && addCustom()} placeholder="Add your own…" maxLength={36} /><button onClick={addCustom} aria-label="Add custom goal">+</button></div><span className="picked-summary">{goals.length || 'No'} selected</span><button className="primary goal-continue" disabled={goals.length < 1} onClick={next}>{goals.length ? 'Make it real' : 'Pick one'} <span>→</span></button></div>
   </article>;
 }
 
 function FutureSnapshot({ goals, data }: { goals: string[]; data: InvestResult | null }) {
-  const featured = goals.slice(0, 2).map(sceneForGoal);
-  return <article className="snapshot-stage snapshot-local"><div className="snapshot-visual snapshot-pair">{featured.map((scene, i) => <figure key={`${scene.src}-${i}`}><img src={scene.src} alt={scene.alt} /><figcaption>{goals[i]}</figcaption></figure>)}<div className="snapshot-overlay"><span>Two goals · one future</span><strong>{goals.slice(0, 2).join(' + ')}</strong></div><span className="snapshot-badge">Your Future Snapshot</span></div><div className="snapshot-copy"><span className="step-label">Built from your choices</span><h2>Picture both.</h2><p>Long-term choices can support more than one part of the life you want.</p>{data && <div className="metric-feature"><small>Possible monthly retirement spending · today’s dollars</small><b><Count value={data.projection.estimatedMonthlyIncome} /></b><span>rough 4% learning example—not a promise</span></div>}<div className="snapshot-goals">{goals.map(g => <span key={g}>{g}</span>)}</div><button className="primary" onClick={() => window.print()}>Save this vision <span>↓</span></button></div></article>;
+  const scene = combinationScene(goals);
+  return <article className="snapshot-stage snapshot-local"><div className="snapshot-visual"><img src={scene.src} alt={scene.alt} /><div className="snapshot-overlay"><span>{goals.length > 1 ? 'Many goals · one future' : 'Your future direction'}</span><strong>{goals.slice(0, 3).join(' + ')}</strong></div><span className="snapshot-badge">Your Future Snapshot</span></div><div className="snapshot-copy"><span className="step-label">Built from your choices</span><h2>{goals.length > 1 ? 'Picture it together.' : 'Picture it.'}</h2><p>{scene.copy}</p>{data && <div className="metric-feature"><small>Possible monthly retirement spending · today’s dollars</small><b><Count value={data.projection.estimatedMonthlyIncome} /></b><span>rough 4% learning example—not a promise</span></div>}<div className="snapshot-goals">{goals.map(g => <span key={g}>{g}</span>)}</div><button className="primary" onClick={() => window.print()}>Save this vision <span>↓</span></button></div></article>;
 }
 
-function sceneForGoal(goal: string) {
-  const text = goal.toLowerCase();
-  if (/active|healthy|healthcare|outdoor/.test(text)) return { src: '/public/future-scenes/health-active.png', alt: 'An active older adult walking beside a community garden' };
-  if (/volunteer|community|purpose/.test(text)) return { src: '/public/future-scenes/community-purpose.png', alt: 'Neighbors volunteering together in a community garden' };
-  if (/hobb|art|learning/.test(text)) return { src: '/public/future-scenes/hobbies-learning.png', alt: 'An older adult enjoying art and lifelong learning' };
-  if (/family|friend|grand|loved|legacy|home/.test(text)) return { src: '/public/future-scenes/family-security.png', alt: 'A family sharing a calm morning in a comfortable home' };
-  if (/business|work|independence/.test(text)) return { src: '/public/future-scenes/career-creative.png', alt: 'A young adult opening a neighborhood creative studio' };
-  if (/travel|move/.test(text)) return { src: '/public/future-scenes/travel-freedom.png', alt: 'A young adult enjoying a calm morning in a coastal town' };
-  return { src: '/public/future-scenes/family-security.png', alt: 'A calm, secure morning at home' };
+function combinationScene(goals: string[]) {
+  const text = goals.join(' ').toLowerCase();
+  const family = /family|friend|grand|loved|legacy/.test(text);
+  const health = /active|healthy|healthcare|outdoor/.test(text);
+  const travel = /travel|move|freedom|retire/.test(text);
+  const creative = /hobb|art|learning|purpose|volunteer|community/.test(text);
+  const secure = /peace|reserve|debt|home/.test(text);
+  if (travel && family) return { src: '/public/future-scenes/combo-travel-family.png', alt: 'A multigenerational family enjoying a coastal trip together', copy: 'A future with room for both discovery and the people you love.' };
+  if (health && family) return { src: '/public/future-scenes/combo-health-family.png', alt: 'A healthy multigenerational family cycling together', copy: 'More healthy years can mean more shared years.' };
+  if (creative) return { src: '/public/future-scenes/combo-hobby-community.png', alt: 'Neighbors sharing a creative pottery workshop', copy: 'Time for creativity can also become time for contribution and connection.' };
+  if (secure) return { src: '/public/future-scenes/combo-security-home.png', alt: 'An older couple enjoying a peaceful morning at home', copy: 'Security can look like a calm home, independence, and fewer financial worries.' };
+  if (goals.length === 1 && health) return { src: '/public/future-scenes/health-active.png', alt: 'An active older adult beside a community garden', copy: 'A future with more energy, movement, and independence.' };
+  return { src: '/public/future-scenes/combo-travel-family.png', alt: 'A family sharing time together on a coastal trip', copy: 'Your choices can support several meaningful parts of life at once.' };
 }
 
 function shortAssetTitle(id: string) { return ({ stock: 'Stock', etf: 'ETF', bond: 'Bond' } as Record<string, string>)[id] || id; }
