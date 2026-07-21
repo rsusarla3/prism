@@ -141,15 +141,16 @@ Open [http://localhost:8787](http://localhost:8787). The server binds to `0.0.0.
 
 For the GitHub extension dev-mode preview, open
 [http://localhost:8787/extension-dev/](http://localhost:8787/extension-dev/).
-It supplies simulated tabs when the page is opened outside Chrome's extension
-runtime, while still saving through the real local source-library API.
+It supplies one sample page when opened outside Chrome's extension runtime,
+while still using the real local source-library API.
 
-`POST /api/generate` (raw text to study bundle, see
-[`docs/prism/GENERATION_SPEC.md`](docs/prism/GENERATION_SPEC.md)) needs a
-`GEMINI_API_KEY` environment variable. Without it the route returns `501`;
-every other route works with no key. Optional `GEMINI_MODEL` overrides the
-default model id. Captured sources and generated materials are stored in
-`data/prism.sqlite`; optional `PRISM_DB_PATH` changes that location.
+AI generation needs a server-side `GEMINI_API_KEY` environment variable.
+Without it, learning-material generation returns `501`; capture and the rest of
+the app still work. Optional `GEMINI_MODEL` overrides the default model id.
+Captured sources and their generated Read, Listen, Watch, Explore, and Quiz
+assets are stored in `data/prism.sqlite`; optional `PRISM_DB_PATH` changes that
+location. Each asset is generated and cached separately: selecting one ray
+never requests the other four.
 
 For UI development with hot reload, keep the API server running and start Vite in another terminal:
 
@@ -165,15 +166,17 @@ The production build compiles the React UI into `apps/web/public`, where the dep
 1. Open `chrome://extensions`.
 2. Enable **Developer mode**.
 3. Select **Load unpacked** and choose `apps/extension`.
-4. Click **Collect open tabs**, approve Chrome's optional website permission,
-   choose the tabs to share, and confirm the capture.
-5. Open the web **Library** and select **Create learning material** for a saved
-   source. You can also highlight text and use **Learn this with Prism** to save
-   only that selection.
+4. Open the side panel from the extension toolbar and choose a ray: **Read**,
+   **Listen**, **Watch**, **Explore**, or **Quiz**.
+5. Approve Chrome's optional website permission when asked. Prism captures only
+   the active page (or your explicit selected text), saves it locally, and
+   generates only the learning material represented by that ray.
+6. Click the same ray again to reopen its saved result without another model
+   request. Use **Open source library** to see all captured pages and assets.
 
-The extension does not monitor pages or browsing history. Multi-tab capture asks
-for optional HTTP/HTTPS access only after a user gesture, previews the eligible
-tabs, and reads only the tabs the learner confirms.
+The extension does not monitor pages or browsing history. Active-page capture
+asks for optional HTTP/HTTPS access only after the learner clicks a ray, and it
+reads only that active page or an explicit selection.
 
 ## Quality commands
 
