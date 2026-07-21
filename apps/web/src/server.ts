@@ -16,7 +16,6 @@ import path from 'node:path';
 import os from 'node:os';
 
 import { parseFiniteAll } from 'prism-shared';
-import type { GenerateRequest } from 'prism-shared';
 import {
   compareGrowth,
   projectInvestment,
@@ -26,7 +25,7 @@ import {
   SUGGESTED_KEYWORDS,
   FUTURE_GOALS,
 } from 'prism-verifiers';
-import { generateStudyBundle, createGeminiClient, type LLMClient } from 'prism-generation';
+import { generateStudyBundle, createGeminiClient, prepareGenerateRequest, type LLMClient } from 'prism-generation';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
@@ -45,11 +44,22 @@ function send(res: http.ServerResponse, status: number, body: unknown) {
   res.end(json);
 }
 
+const MAX_REQUEST_BYTES = 25_000;
+
 function readBody<T>(req: http.IncomingMessage): Promise<T> {
   return new Promise((resolve, reject) => {
     let data = '';
-    req.on('data', (c) => (data += c));
+    let rejected = false;
+    req.on('data', (chunk: Buffer) => {
+      if (rejected) return;
+      data += chunk.toString('utf8');
+      if (Buffer.byteLength(data, 'utf8') > MAX_REQUEST_BYTES) {
+        rejected = true;
+        reject(Object.assign(new Error(`Request body must not exceed ${MAX_REQUEST_BYTES} bytes.`), { status: 413 }));
+      }
+    });
     req.on('end', () => {
+      if (rejected) return;
       try {
         resolve(data ? (JSON.parse(data) as T) : ({} as T));
       } catch (e) {
@@ -95,14 +105,12 @@ const llmClient: LLMClient | null = geminiApiKey
   ? createGeminiClient({ apiKey: geminiApiKey, model: process.env.GEMINI_MODEL })
   : null;
 
-async function handleGenerate(body: GenerateRequest) {
+async function handleGenerate(body: unknown) {
+  const request = prepareGenerateRequest(body);
   if (!llmClient) {
     throw Object.assign(new Error('No LLM provider configured yet.'), { status: 501 });
   }
-  if (!body.text || body.text.trim() === '') {
-    throw Object.assign(new Error('text is required.'), { status: 400 });
-  }
-  const result = await generateStudyBundle(body, llmClient);
+  const result = await generateStudyBundle(request, llmClient);
   if (!result.bundle) {
     throw Object.assign(new Error('Generation failed validation.'), { status: 502, issues: result.issues });
   }
@@ -156,7 +164,7 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, { assetClasses: ASSET_CLASSES, suggestedKeywords: SUGGESTED_KEYWORDS, futureGoals: FUTURE_GOALS });
     }
     if (req.method === 'POST' && url.pathname === '/api/generate') {
-      return send(res, 200, await handleGenerate(await readBody<GenerateRequest>(req)));
+      return send(res, 200, await handleGenerate(await readBody<unknown>(req)));
     }
     send(res, 404, { error: 'Not found' });
   } catch (e) {

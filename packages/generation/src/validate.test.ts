@@ -33,10 +33,6 @@ function validBundle(): StudyBundle {
     },
     explore: {
       timeline: [{ label: 'Light absorbed', detail: 'Chlorophyll captures photons.', order: 1 }],
-      data: {
-        caption: 'Oxygen output over time',
-        series: [{ name: 'Oxygen (ppm)', points: [{ x: 0, y: 1 }, { x: 1, y: 2 }] }],
-      },
     },
     quiz: {
       items: [
@@ -157,9 +153,45 @@ describe('validateStudyBundle', () => {
 
   it('rejects a NaN value in explore.data series points', () => {
     const bundle = clone(validBundle());
+    bundle.explore.data = { caption: 'Measurements', series: [{ name: 'Output', points: [{ x: 0, y: 1 }] }] };
     bundle.explore.data!.series[0].points[0].y = NaN;
     const result = validateStudyBundle(bundle);
     expect(result.valid).toBe(false);
     expect(result.issues.some((i) => i.rule === 'explore-data-point-finite')).toBe(true);
+  });
+
+  it('returns structural issues instead of throwing for malformed model output', () => {
+    expect(() => validateStudyBundle({ meta: {} })).not.toThrow();
+    const result = validateStudyBundle({ meta: {} });
+    expect(result.valid).toBe(false);
+    expect(result.issues.some((i) => i.rule === 'invalid-structure')).toBe(true);
+  });
+
+  it('rejects a learner-visible number that is absent from the source', () => {
+    const bundle = clone(validBundle());
+    bundle.read.segments[0].recap = 'Plants produce 42 units.';
+    const result = validateStudyBundle(bundle, 'Plants convert sunlight into energy.');
+    expect(result.issues.some((i) => i.rule === 'number-source-required')).toBe(true);
+  });
+
+  it('accepts equivalent comma-formatted source numbers', () => {
+    const bundle = clone(validBundle());
+    bundle.read.segments[0].recap = 'The population reached 1000.';
+    const result = validateStudyBundle(bundle, 'The population reached 1,000.');
+    expect(result.issues.some((i) => i.rule === 'number-source-required')).toBe(false);
+  });
+
+  it('rejects enum values that do not match the shared contract', () => {
+    const bundle = clone(validBundle());
+    (bundle.watch as { kind: string }).kind = 'animation';
+    const result = validateStudyBundle(bundle);
+    expect(result.issues.some((i) => i.rule === 'invalid-watch-kind')).toBe(true);
+  });
+
+  it('rejects listen indexes that do not reference a read segment', () => {
+    const bundle = clone(validBundle());
+    bundle.listen.segmentIndex = [4];
+    const result = validateStudyBundle(bundle);
+    expect(result.issues.some((i) => i.rule === 'invalid-segment-index')).toBe(true);
   });
 });
