@@ -11,12 +11,12 @@
 const BASE = 'http://localhost:8787';
 const app = document.querySelector('#app');
 
-/** Each ray out of the prism. `run` null => not wired to an engine yet. */
+/** Rohan's six-ray interface, with Joanne's generated assets behind four rays. */
 const WAYS = [
-  { id: 'quiz',    label: 'Quiz',      hint: 'You answer, you don’t skim',  color: 'var(--ray-1)', run: null },
-  { id: 'story',   label: 'Story',     hint: 'Retold as something that happened', color: 'var(--ray-2)', run: null },
-  { id: 'digest',  label: 'Digest',    hint: 'The part that actually matters',   color: 'var(--ray-3)', run: showDigest },
-  { id: 'numbers', label: 'Numbers',   hint: 'Pull the figures out and play',    color: 'var(--ray-4)', run: showNumbers },
+  { id: 'quiz',    label: 'Quiz',      hint: 'You answer, you don’t skim',  color: 'var(--ray-1)', run: () => generateAsset('quiz', 'Quiz') },
+  { id: 'story',   label: 'Story',     hint: 'Hear it as a clear narrative', color: 'var(--ray-2)', run: () => generateAsset('listen', 'Story') },
+  { id: 'digest',  label: 'Digest',    hint: 'The part that actually matters',   color: 'var(--ray-3)', run: () => generateAsset('read', 'Digest') },
+  { id: 'numbers', label: 'Numbers',   hint: 'Trace the evidence and events',    color: 'var(--ray-4)', run: () => generateAsset('explore', 'Numbers') },
   { id: 'growth',  label: 'Growth',    hint: 'Linear vs exponential, live',      color: 'var(--ray-5)', run: () => open('#core') },
   { id: 'future',  label: 'Your future', hint: 'Goals, fees, time horizon',      color: 'var(--ray-6)', run: () => open('#future') },
 ];
@@ -174,6 +174,103 @@ async function ensureContent() {
 
 // ---------------------------------------------------------------- the ways
 
+async function generateAsset(kind, label) {
+  app.innerHTML = `${sourceBlock()}<p class="spin">Preparing ${esc(label)}…</p>`;
+  try {
+    const captured = await captureSource();
+    const saved = await post('/api/sources/capture', { sources: [captured] });
+    const source = saved.sources?.[0];
+    if (!source?.id) throw new Error('Prism could not save this page.');
+    const asset = await post(`/api/sources/${encodeURIComponent(source.id)}/assets/${kind}`, {});
+    renderAsset(label, asset);
+  } catch (error) {
+    renderGenerationError(error?.message || 'Prism could not create this learning material.');
+  }
+}
+
+async function captureSource() {
+  const stored = await chrome.storage.session.get(['selection', 'pendingContext']);
+  const selected = stored.selection || stored.pendingContext;
+  if (selected?.text && selected.pageUrl) {
+    return {
+      url: selected.pageUrl,
+      title: selected.pageTitle || page?.title || 'Selected page text',
+      text: selected.text,
+      capturedAt: new Date(selected.capturedAt || Date.now()).toISOString(),
+    };
+  }
+
+  const result = await chrome.runtime.sendMessage({ type: 'capture-active-tab' });
+  if (result?.error) throw new Error(result.error);
+  if (!result?.source) throw new Error('Prism could not capture the active page.');
+  return result.source;
+}
+
+async function post(path, body) {
+  const response = await fetch(`${BASE}${path}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error || `Prism server returned ${response.status}.`);
+  return data;
+}
+
+function renderAsset(label, asset) {
+  app.innerHTML = `
+    ${sourceBlock()}
+    <p class="eyebrow">${asset.cached ? 'Saved result' : 'Generated now'} · ${esc(label)}</p>
+    <div class="out">${assetHtml(asset.kind, asset.payload)}</div>
+    <p class="note">${asset.cached
+      ? 'Prism reused the saved result instead of making another generation request.'
+      : 'Only this learning material was generated and saved.'}</p>`;
+  bindAssetControls(asset.kind, asset.payload);
+  app.append(backButton());
+}
+
+function assetHtml(kind, data) {
+  if (kind === 'read') {
+    return `<h3>The part that actually matters</h3>${(data.segments || []).map((segment) => `
+      <p>${esc(segment.text)}</p>
+      <p class="recap"><strong>Recap:</strong> ${esc(segment.recap)}</p>
+      ${(segment.glosses || []).map((gloss) => `<p class="gloss"><strong>${esc(gloss.term)}</strong> — ${esc(gloss.definition)}</p>`).join('')}
+    `).join('')}`;
+  }
+  if (kind === 'listen') {
+    return `<h3>Story</h3><p>${esc(data.script)}</p><button class="fig" id="play-story">▶ Listen</button>`;
+  }
+  if (kind === 'explore') {
+    const timeline = (data.timeline || []).sort((a, b) => a.order - b.order)
+      .map((item) => `<p><strong>${esc(item.label)}</strong><br>${esc(item.detail)}</p>`).join('');
+    const chart = data.data
+      ? `<p><strong>${esc(data.data.caption)}</strong></p>${data.data.series.map((series) => `<p>${esc(series.name)}: ${series.points.map((point) => `${esc(point.x)} → ${esc(point.y)}`).join(', ')}</p>`).join('')}`
+      : '';
+    return `<h3>Evidence on this page</h3>${timeline || chart ? timeline + chart : '<p>No source-supported timeline or comparable figures were available.</p>'}`;
+  }
+  if (kind === 'watch') {
+    return `<h3>Watch</h3><p>${esc(data.altText)}</p>${(data.steps || []).map((step) => `<p><strong>${esc(step.caption)}</strong><br>${esc(step.description)}</p>`).join('')}`;
+  }
+  return `<h3>Quiz</h3>${(data.items || []).map((item) => `
+    <details><summary>${esc(item.stem)}</summary>
+      ${(item.options || []).map((option) => `<p class="${option.correct ? 'correct' : ''}"><strong>${esc(option.text)}</strong> — ${esc(option.feedback)}</p>`).join('')}
+      <p>${esc(item.explanation)}</p>
+    </details>`).join('')}`;
+}
+
+function bindAssetControls(kind, data) {
+  if (kind !== 'listen') return;
+  document.querySelector('#play-story')?.addEventListener('click', () => {
+    speechSynthesis.cancel();
+    speechSynthesis.speak(new SpeechSynthesisUtterance(data.script));
+  });
+}
+
+function renderGenerationError(message) {
+  app.innerHTML = `${sourceBlock()}<div class="out"><p class="err">${esc(message)}</p></div>`;
+  app.append(backButton());
+}
+
 async function showDigest() {
   app.innerHTML = `${sourceBlock()}<p class="spin">Reading…</p>`;
   const c = await ensureContent();
@@ -249,6 +346,15 @@ function devShim() {
       } }],
     },
     storage: { session: { get: async () => ({}), set: async () => {}, remove: async () => {} } },
+    runtime: {
+      id: '',
+      sendMessage: async () => ({ source: {
+        url: 'https://www.wsj.com/finance/rate-cuts',
+        title: 'What falling rates mean for your savings',
+        text: 'The Federal Reserve cut its benchmark rate. Bond prices and savings yields respond differently as rates change.',
+        capturedAt: new Date().toISOString(),
+      } }),
+    },
   };
   return true;
 }

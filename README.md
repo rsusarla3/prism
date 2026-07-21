@@ -22,7 +22,7 @@ grounded in peer-reviewed learning science
 %%{init: {'theme':'base','themeVariables':{'fontSize':'20px','fontFamily':'system-ui, sans-serif','primaryColor':'#f8fafc','primaryTextColor':'#0f172a','primaryBorderColor':'#475569','lineColor':'#94a3b8'}}}%%
 flowchart TD
     PAGE["Any web page<br/>article, problem, or chart"]
-    EXT["1 &nbsp; Capture<br/>extension reads the selection"]
+    EXT["1 &nbsp; Capture<br/>extension reads confirmed tabs or a selection"]
     UND["2 &nbsp; Understand<br/>concept, reading level, intent"]
     GEN["3 &nbsp; Generate<br/>model builds study assets<br/>within curriculum guardrails"]
     VER["4 &nbsp; Verify<br/>deterministic math, answer gate"]
@@ -36,9 +36,9 @@ flowchart TD
     class EXT,UND,GEN todo;
 ```
 
-Solid nodes exist today. Dashed nodes are the build ahead: capture, understand,
-and generate are the hackathon's main work, while the verifiers and lesson UI
-already ship.
+Capture, persistence, structured generation, validation, and the lesson library
+now run end to end. The learner explicitly chooses which tabs or selection to
+share before Prism reads page text.
 
 ### Generated assets and their evidence
 
@@ -139,11 +139,17 @@ npm run dev
 
 Open [http://localhost:8787](http://localhost:8787). The server binds to `0.0.0.0` by default for same-hotspot demos; set `HOST=127.0.0.1` to keep it local.
 
+For the GitHub extension dev-mode preview, open
+[http://localhost:8787/extension-dev/](http://localhost:8787/extension-dev/).
+It supplies simulated tabs when the page is opened outside Chrome's extension
+runtime, while still saving through the real local source-library API.
+
 `POST /api/generate` (raw text to study bundle, see
 [`docs/prism/GENERATION_SPEC.md`](docs/prism/GENERATION_SPEC.md)) needs a
 `GEMINI_API_KEY` environment variable. Without it the route returns `501`;
 every other route works with no key. Optional `GEMINI_MODEL` overrides the
-default model id.
+default model id. Captured sources and generated materials are stored in
+`data/prism.sqlite`; optional `PRISM_DB_PATH` changes that location.
 
 For UI development with hot reload, keep the API server running and start Vite in another terminal:
 
@@ -159,10 +165,15 @@ The production build compiles the React UI into `apps/web/public`, where the dep
 1. Open `chrome://extensions`.
 2. Enable **Developer mode**.
 3. Select **Load unpacked** and choose `apps/extension`.
-4. Highlight ordinary webpage text and choose **Learn this with Prism** from the context menu.
-5. Confirm the selection and choose a learning goal in the side panel.
+4. Click **Collect open tabs**, approve Chrome's optional website permission,
+   choose the tabs to share, and confirm the capture.
+5. Open the web **Library** and select **Create learning material** for a saved
+   source. You can also highlight text and use **Learn this with Prism** to save
+   only that selection.
 
-The extension requests only `sidePanel`, `storage`, `contextMenus`, and temporary `activeTab` access. It does not request browsing history or broad host access, monitor pages, or read other tabs.
+The extension does not monitor pages or browsing history. Multi-tab capture asks
+for optional HTTP/HTTPS access only after a user gesture, previews the eligible
+tabs, and reads only the tabs the learner confirms.
 
 ## Quality commands
 
@@ -193,6 +204,7 @@ npm run build
 ## Privacy and safety
 
 - Selected page content is treated as untrusted and shown before use.
+- Open-tab capture is user-initiated, permission-gated, and selection-based.
 - Original homework answers remain server-gated until a meaningful attempt.
 - Financial data is manual and remains in memory for this demo.
 - No bank credentials, provider tokens, or model secrets are shipped to the extension.
@@ -201,7 +213,10 @@ npm run build
 
 ## Known limitations
 
-- In-memory sessions and plans reset with the server.
+- Sessions and plans remain in memory, while source-library records persist in
+  local SQLite.
+- The local source library has no user accounts or tenant isolation yet and is
+  intended for single-user development only.
 - The extension hands the confirmed goal to the web experience but the full session UI runs in the web app.
 - Volatility, taxes, employer matches, and individualized suitability are intentionally excluded.
 - The algebra verifier supports a constrained linear-expression grammar.

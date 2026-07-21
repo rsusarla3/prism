@@ -36,6 +36,17 @@ function shuffle<T>(arr: T[], seed: number): T[] {
   return a;
 }
 
+function distractorsFor(answer: string, misconceptions: string[]): string[] {
+  const n = Number(answer);
+  if (Number.isFinite(n) && n !== 0) {
+    const decimals = (answer.split('.')[1] ?? '').length;
+    const format = (value: number) => value.toFixed(decimals);
+    return [format(n * 1.12), format(n * 0.88), format(n * 1.05)].filter((value) => value !== answer);
+  }
+  const candidates = misconceptions.slice(0, 3);
+  return candidates.length ? candidates : ['None of these'];
+}
+
 /**
  * Build a 3-question quiz from a concept. Two questions test objectives
  * (positive framing), one tests a known misconception (so we catch it).
@@ -62,10 +73,7 @@ export function buildQuiz(concept: CurriculumConcept, seed = Date.now()): Quiz {
   // Q2: misconception trap
   if (mis[0]) {
     const correct = `False: ${mis[0]}`;
-    const opts = shuffle(
-      [correct, `True: ${mis[0]}`, ...objs.slice(0, 2).map((o) => o)],
-      seed + 2,
-    ).slice(0, 4);
+    const opts = shuffle([correct, `True: ${mis[0]}`], seed + 2);
     questions.push({
       id: 'mis1',
       prompt: `True or false: ${mis[0]}`,
@@ -77,7 +85,7 @@ export function buildQuiz(concept: CurriculumConcept, seed = Date.now()): Quiz {
 
   // Q3: apply — pick the correct similar-problem answer
   const answer = concept.similarProblem.answer;
-  const opts = shuffle([answer, '0', 'undefined', 'depends on x'], seed + 3).slice(0, 4);
+  const opts = shuffle([answer, ...distractorsFor(answer, mis)], seed + 3).slice(0, 4);
   questions.push({
     id: 'apply',
     prompt: concept.similarProblem.prompt,
