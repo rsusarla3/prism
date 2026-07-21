@@ -22,16 +22,19 @@ export function createGeminiClient(opts: GeminiClientOptions): LLMClient {
   const model = opts.model ?? DEFAULT_GEMINI_MODEL;
 
   return {
-    async complete({ system, user }) {
+    async complete({ system, user, schema }) {
       const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${opts.apiKey}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
         {
           method: 'POST',
-          headers: { 'content-type': 'application/json' },
+          headers: { 'content-type': 'application/json', 'x-goog-api-key': opts.apiKey },
           body: JSON.stringify({
             systemInstruction: { parts: [{ text: system }] },
             contents: [{ role: 'user', parts: [{ text: user }] }],
-            generationConfig: { responseMimeType: 'application/json' },
+            generationConfig: {
+              responseMimeType: 'application/json',
+              ...(schema ? { responseJsonSchema: schema } : {}),
+            },
           }),
         },
       );

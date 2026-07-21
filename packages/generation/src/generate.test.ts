@@ -13,7 +13,7 @@ const VALID_BUNDLE: StudyBundle = {
   },
   read: { segments: [{ text: 'Some text.', glosses: [], recap: 'A recap.' }] },
   listen: { script: 'Here is what happened.', segmentIndex: [0], highlightLeadMs: 300 },
-  watch: { kind: 'diagram', steps: [{ caption: 'Step 1', description: 'It shows the idea.' }], altText: 'A labelled diagram of the idea.' },
+  watch: { kind: 'diagram', steps: [{ caption: 'First step', description: 'It shows the idea.' }], altText: 'A labelled diagram of the idea.' },
   explore: { timeline: [{ label: 'Start', detail: 'It began.', order: 0 }] },
   quiz: {
     items: [
@@ -48,6 +48,18 @@ describe('generateStudyBundle', () => {
     expect(result.bundle).not.toBeNull();
     expect(result.issues).toEqual([]);
     expect(result.attempts).toBe(1);
+  });
+
+  it('passes the StudyBundle schema to the provider', async () => {
+    let receivedSchema: Record<string, unknown> | undefined;
+    const llm: LLMClient = {
+      async complete(args) {
+        receivedSchema = args.schema;
+        return JSON.stringify(VALID_BUNDLE);
+      },
+    };
+    await generateStudyBundle({ text: 'passage' }, llm);
+    expect(receivedSchema).toMatchObject({ type: 'object' });
   });
 
   it('retries once and succeeds when the second attempt fixes the issues', async () => {
