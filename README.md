@@ -11,16 +11,55 @@ The hackathon build is educational software, not an answer bot, brokerage calcul
 
 ## Architecture
 
-```text
-Chrome side panel ── selected-text preview + goal choice
-        │
-        ▼
-Web experience ─── Prism Core / Prism Future
-        │
-        ├── shared contracts and provider boundaries
-        ├── approved curriculum and orchestration rules
-        └── deterministic math/finance verifiers
+Both experiences ride the **same idea** — linear vs. exponential growth — so
+what a learner discovers in Core reappears as compounding in Future. The data
+flow below shows how a request travels from the UI to the deterministic
+verifiers and back.
+
+```mermaid
+flowchart TD
+    subgraph client["🖥️ Client"]
+        EXT["Chrome extension<br/>(MV3 side panel)<br/>captures selection"]
+        APP["React UI · App.tsx"]
+        CORE["Core.tsx<br/>Predict → Explore → Explain → Transfer"]
+        FUT["Future.tsx<br/>Goals → Model → Assets → Snapshot"]
+        IMG["imageGen.ts"]
+        EXT -->|opens| APP
+        APP --> CORE
+        APP --> FUT
+    end
+
+    subgraph server["⚙️ Node server · apps/web/src/server.ts (zero-dep http)"]
+        RG["POST /api/core/growth"]
+        RI["POST /api/future/invest"]
+        RC["GET /api/future/content"]
+    end
+
+    subgraph pkgs["📦 Packages (deterministic, tested)"]
+        GROW["verifiers/growth.ts<br/>compareGrowth()"]
+        INV["verifiers/invest.ts<br/>projectInvestment()"]
+        CONTENT["verifiers/index.ts<br/>ASSET_CLASSES · FUTURE_GOALS"]
+        SHARED["shared<br/>authoritative types & contracts"]
+    end
+
+    CORE -->|"api.growth()"| RG --> GROW -->|"GrowthComparison<br/>(linear vs exponential + crossover)"| CORE
+    FUT  -->|"api.invest()"| RI --> INV -->|"InvestmentProjection<br/>(contributed vs balance = growth)"| FUT
+    FUT  -->|"api.content()"| RC --> CONTENT --> FUT
+    FUT  -.->|"user's own key,<br/>never touches server"| IMG -.-> OPENAI["OpenAI Images API"]
+
+    SHARED -.->|types| client
+    SHARED -.->|types| pkgs
+
+    classDef live fill:#e8f5e9,stroke:#43a047,color:#1b5e20;
+    classDef ext fill:#fff3e0,stroke:#fb8c00,color:#e65100;
+    class GROW,INV,CONTENT,SHARED live;
+    class OPENAI ext;
 ```
+
+> The linear path in Core (`+increment`) and the "you contribute" line in
+> Future are the **same shape**; the exponential path (`×multiplier`) and the
+> compounding "balance" line are the **same shape**. The gap between them —
+> Core's *crossover* — is Future's *growth*. One engine, two audiences.
 
 | Location | Responsibility |
 |---|---|
