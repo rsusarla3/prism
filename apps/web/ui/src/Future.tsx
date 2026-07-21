@@ -1,5 +1,91 @@
-import{useEffect,useRef,useState}from'react';import{api}from'./api';import{Count,ErrorState,Range,Skeleton,Stepper}from'./components';import{FutureChart}from'./Charts';import{openAIImageProvider,snapshotPrompt}from'./imageGen';import type{Content,InvestResult}from'./types';
-const defaults={startingBalance:500,monthlyContribution:200,years:35,assumedReturnPct:7,feePct:.2,inflationPct:2.5};
-export default function Future(){const[step,setStep]=useState(0),[content,setContent]=useState<Content|null>(null),[goals,setGoals]=useState<string[]>([]),[custom,setCustom]=useState(''),[profile,setProfile]=useState(defaults),[data,setData]=useState<InvestResult|null>(null),[loading,setLoading]=useState(true),[error,setError]=useState(''),[overlays,setOverlays]=useState(new Set<string>()),[key,setKey]=useState(()=>localStorage.getItem('prism-image-key')||''),[showSettings,setShowSettings]=useState(false),[image,setImage]=useState(''),[imageState,setImageState]=useState<'idle'|'loading'|'error'>('idle'),[imageError,setImageError]=useState('');const title=useRef<HTMLHeadingElement>(null);useEffect(()=>{api.content().then(setContent).catch(e=>setError(e.message))},[]);useEffect(()=>{setLoading(true);const timer=setTimeout(()=>api.invest(profile).then(setData).catch(e=>setError(e.message)).finally(()=>setLoading(false)),120);return()=>clearTimeout(timer)},[profile]);useEffect(()=>title.current?.focus(),[step]);const choose=(label:string)=>setGoals(g=>g.includes(label)?g.filter(x=>x!==label):g.length<5?[...g,label]:g);const addCustom=()=>{const value=custom.trim();if(value&&goals.length<5&&!goals.includes(value)){setGoals([...goals,value]);setCustom('')}};const saveKey=(value:string)=>{setKey(value);value?localStorage.setItem('prism-image-key',value):localStorage.removeItem('prism-image-key')};const generate=async()=>{if(!key){setShowSettings(true);return}setImageState('loading');setImageError('');try{setImage(await openAIImageProvider.generate(key,snapshotPrompt(goals)));setImageState('idle')}catch(e){setImageError((e as Error).message);setImageState('error')}};const toggle=(name:string)=>setOverlays(old=>{const next=new Set(old);next.has(name)?next.delete(name):next.add(name);return next});return <section className="lesson future page-enter"><header className="lesson-head"><div><p className="kicker mint">Prism Future · Your horizon</p><h1 ref={title} tabIndex={-1}>Build toward what matters.</h1><p>Turn a long-term investing concept into a grounded picture of your future.</p></div><Stepper step={step} labels={['Imagine','Model','Understand','Visualize']}/></header>{error&&<ErrorState message={error}/>}<div className="stage" key={step}>{step===0?<article className="goal-stage"><div className="goal-heading"><div><span className="step-label">Select 3–5</span><h2>What do you want money to make possible?</h2></div><span className={`goal-count ${goals.length>=3?'ready':''}`}>{goals.length}<small>/5</small></span></div>{!content?<Skeleton/>:<div className="goal-categories">{[...new Set(content.futureGoals.map(g=>g.category))].map(category=><section key={category}><h3>{category}</h3><div className="goal-grid">{content.futureGoals.filter(g=>g.category===category).map(g=><button aria-pressed={goals.includes(g.label)} className={goals.includes(g.label)?'selected':''} onClick={()=>choose(g.label)} key={g.id}><span>{goalIcon(g.category)}</span>{g.label}<i>{goals.includes(g.label)?'✓':'+'}</i></button>)}</div></section>)}</div>}<div className="custom-goal"><input value={custom} onChange={e=>setCustom(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addCustom()} placeholder="Something uniquely yours…" maxLength={36}/><button onClick={addCustom}>Add goal</button></div>{goals.length>0&&<div className="selected-strip">{goals.map(g=><button onClick={()=>choose(g)} key={g}>{g} ×</button>)}</div>}<button className="primary" disabled={goals.length<3} onClick={()=>setStep(1)}>Build my scenario <span>→</span></button></article>:step===1?<div className="future-model"><aside className="control-card"><span className="step-label">Your assumptions</span><h2>Shape the horizon</h2><Range label="Starting balance" value={profile.startingBalance} min={0} max={25000} step={100} onChange={n=>setProfile({...profile,startingBalance:n})}/><Range label="Monthly contribution" value={profile.monthlyContribution} min={0} max={1500} step={25} onChange={n=>setProfile({...profile,monthlyContribution:n})}/><Range label="Years" value={profile.years} min={5} max={50} onChange={n=>setProfile({...profile,years:n})}/><Range label="Illustrative return" value={profile.assumedReturnPct} min={0} max={12} step={.5} suffix="%" onChange={n=>setProfile({...profile,assumedReturnPct:n})}/><Range label="Annual fee" value={profile.feePct} min={0} max={2} step={.1} suffix="%" onChange={n=>setProfile({...profile,feePct:n})}/><button className="primary" onClick={()=>setStep(2)}>Understand the choices <span>→</span></button></aside><article className="chart-card">{loading||!data?<Skeleton/>:<><div className="chart-title"><div><span className="step-label">Illustrative projection</span><h2><Count value={data.projection.balance}/></h2></div><span className="live-dot">Live</span></div><div className="scenario-toggles"><button aria-pressed={overlays.has('later')} onClick={()=>toggle('later')}>Start 5 years later</button><button aria-pressed={overlays.has('fee')} onClick={()=>toggle('fee')}>1% higher fee</button></div><FutureChart baseline={data.projection.series} startLater={data.comparisons.startLater.series} higherFee={data.comparisons.higherFee.series} overlays={overlays}/><div className="metric-grid"><div><small>You contribute</small><b><Count value={data.projection.contributed}/></b></div><div><small>Illustrative growth</small><b><Count value={data.projection.growth}/></b></div><div><small>Today’s dollars</small><b><Count value={data.projection.inflationAdjustedBalance}/></b></div></div><p className="disclaimer">Educational illustration only. Returns vary, losses are possible, and this is not investment advice.</p></>}</article></div>:step===2?<article className="asset-stage"><span className="step-label">Different tools · different tradeoffs</span><h2>Know what you’re choosing.</h2><div className="asset-grid">{content?.assetClasses.map((a,i)=><article key={a.id}><span>0{i+1}</span><h3>{a.title}</h3><p>{a.description}</p></article>)}</div><div className="insight"><span>◇</span><p><b>An account is a container.</b> An ETF, stock, or bond is an investment that may go inside it. An ETF is not automatically diversified or low-risk.</p></div><button className="primary" onClick={()=>setStep(3)}>Visualize the future <span>→</span></button></article>:<article className="snapshot-stage"><div className="snapshot-visual">{image?<img src={image} alt={`Aspirational Future Snapshot inspired by ${goals.join(', ')}`}/>:imageState==='loading'?<div className="image-skeleton"><i/><span>Creating your grounded future scene…</span></div>:<Fallback goals={goals}/>}<span className="snapshot-badge">Future Snapshot</span></div><div className="snapshot-copy"><span className="step-label">A direction, not a promise</span><h2>{goals.slice(0,3).join('. ')}.</h2><p>This scene represents what consistency could support. It is aspirational—not a forecast of investment results.</p>{data&&<div className="metric-feature"><small>Illustrative monthly income in today’s dollars</small><b><Count value={data.projection.estimatedMonthlyIncome}/></b><span>using a rough 4% teaching convention</span></div>}<div className="snapshot-actions"><button className="primary" onClick={generate} disabled={imageState==='loading'}>{imageState==='loading'?'Generating…':image?'Generate another':'Generate snapshot image'} <span>✦</span></button><button className="secondary" onClick={()=>setShowSettings(x=>!x)}>Image settings</button></div>{!key&&<p className="key-note">Add your own OpenAI API key to enable images. Until then, Prism uses the local illustration.</p>}{imageError&&<ErrorState message={imageError}/>} {showSettings&&<div className="settings"><label>OpenAI API key<input type="password" autoComplete="off" value={key} onChange={e=>saveKey(e.target.value)} placeholder="sk-…"/></label><p>Stored only in this browser. It goes directly to OpenAI when you generate—never to Prism’s server.</p>{key&&<button className="text-button danger" onClick={()=>saveKey('')}>Remove key</button>}</div>}<details className="prompt"><summary>See the image prompt</summary><p>{snapshotPrompt(goals)}</p></details></div></article>}</div></section>}
-function goalIcon(category:string){return({security:'◒',freedom:'↗',lifestyle:'✦',family:'◎',achievement:'◇'}as Record<string,string>)[category]||'◇'}
-function Fallback({goals}:{goals:string[]}){return <div className="fallback-art" role="img" aria-label={`Local illustration for ${goals.join(', ')}`}><div className="sun"/><div className="hill h1"/><div className="hill h2"/><div className="home-shape"><i/><b/></div><div className="person"><i/><b/></div><div className="goal-cloud">{goals.slice(0,3).map(g=><span key={g}>{g}</span>)}</div></div>}
+import { useEffect, useRef, useState } from 'react';
+import { api } from './api';
+import { Count, ErrorState, Range, Skeleton, Stepper } from './components';
+import { FutureChart } from './Charts';
+import CurriculumMap from './CurriculumMap';
+import type { Content, InvestResult } from './types';
+
+const defaults = { startingBalance: 1000, monthlyContribution: 200, years: 35, assumedReturnPct: 7, feePct: .2, inflationPct: 2.5 };
+
+export default function Future() {
+  const [step, setStep] = useState(0);
+  const [content, setContent] = useState<Content | null>(null);
+  const [goals, setGoals] = useState<string[]>([]);
+  const [custom, setCustom] = useState('');
+  const [profile, setProfile] = useState(defaults);
+  const [data, setData] = useState<InvestResult | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [overlays, setOverlays] = useState(new Set<string>());
+  const heading = useRef<HTMLHeadingElement>(null);
+
+  useEffect(() => { api.content().then(setContent).catch(e => setError(e.message)); }, []);
+  useEffect(() => {
+    setLoading(true);
+    const timer = setTimeout(() => api.invest(profile).then(setData).catch(e => setError(e.message)).finally(() => setLoading(false)), 120);
+    return () => clearTimeout(timer);
+  }, [profile]);
+  useEffect(() => { heading.current?.focus(); }, [step]);
+
+  const choose = (label: string) => setGoals(old => old.includes(label) ? old.filter(x => x !== label) : old.length < 5 ? [...old, label] : old);
+  const addCustom = () => {
+    const value = custom.trim();
+    if (value && goals.length < 5 && !goals.includes(value)) { setGoals([...goals, value]); setCustom(''); }
+  };
+  const toggle = (name: string) => setOverlays(old => {
+    const next = new Set(old); next.has(name) ? next.delete(name) : next.add(name); return next;
+  });
+
+  return <section className={`lesson future page-enter ${step === 0 ? 'future-imagine' : ''}`}><CurriculumMap product="future" />
+    {step > 0 && <header className="lesson-head"><div><p className="kicker mint">Open now · Investing · Compound interest</p><h1 ref={heading} tabIndex={-1}>Build what matters.</h1></div><Stepper step={step} labels={['Imagine', 'Model', 'Learn', 'See it']} /></header>}
+    {error && <ErrorState message={error} />}
+    <div className="stage" key={step}>
+      {step === 0 ? <GoalCanvas content={content} goals={goals} custom={custom} setCustom={setCustom} choose={choose} addCustom={addCustom} next={() => setStep(1)} heading={heading} />
+        : step === 1 ? <div className="future-model">
+          <aside className="control-card"><span className="step-label">Try your numbers</span><h2>Shape the future</h2>
+            <Range label="Starting amount" value={profile.startingBalance} min={0} max={50000} step={1000} onChange={n => setProfile({ ...profile, startingBalance: n })} />
+            <Range label="Each month" value={profile.monthlyContribution} min={0} max={2000} step={100} onChange={n => setProfile({ ...profile, monthlyContribution: n })} />
+            <Range label="Years" value={profile.years} min={5} max={50} step={5} onChange={n => setProfile({ ...profile, years: n })} />
+            <Range label="Possible growth" value={profile.assumedReturnPct} min={1} max={12} step={1} suffix="%" onChange={n => setProfile({ ...profile, assumedReturnPct: n })} />
+            <button className="primary" onClick={() => setStep(2)}>What could I invest in? <span>→</span></button>
+          </aside>
+          <article className="chart-card">{loading || !data ? <Skeleton /> : <>
+            <div className="chart-title"><div><span className="step-label">Possible balance</span><h2><Count value={data.projection.balance} /></h2></div><span className="live-dot">Live</span></div>
+            <div className="scenario-toggles"><button aria-pressed={overlays.has('later')} onClick={() => toggle('later')}>Wait 5 years</button></div>
+            <FutureChart baseline={data.projection.series} startLater={data.comparisons.startLater.series} higherFee={data.comparisons.higherFee.series} overlays={overlays} />
+            <div className="metric-grid"><div><small>You put in</small><b><Count value={data.projection.contributed} /></b></div><div><small>Possible growth</small><b><Count value={data.projection.growth} /></b></div><div><small>In today’s dollars</small><b><Count value={data.projection.inflationAdjustedBalance} /></b></div></div>
+            <p className="disclaimer">Example only. Markets can rise or fall.</p>
+          </>}</article>
+        </div>
+        : step === 2 ? <article className="asset-stage"><span className="step-label">Three building blocks</span><h2>Own. Bundle. Lend.</h2><div className="asset-grid">{content?.assetClasses.map((a, i) => <article key={a.id}><span>0{i + 1}</span><h3>{shortAssetTitle(a.id)}</h3><p>{shortAssetCopy(a.id)}</p></article>)}</div><div className="insight"><span>◇</span><p><b>Account = box.</b> Investments go inside it.</p></div><button className="primary" onClick={() => setStep(3)}>See my future <span>→</span></button></article>
+        : <FutureSnapshot goals={goals} data={data} />}
+    </div>
+  </section>;
+}
+
+function GoalCanvas({ content, goals, custom, setCustom, choose, addCustom, next, heading }: { content: Content | null; goals: string[]; custom: string; setCustom: (value: string) => void; choose: (label: string) => void; addCustom: () => void; next: () => void; heading: React.RefObject<HTMLHeadingElement | null> }) {
+  return <article className="goal-stage"><div className="goal-orb orb-one" /><div className="goal-orb orb-two" /><div className="goal-heading"><div><span className="step-label">Pick 3–5</span><h1 ref={heading} tabIndex={-1}>What should money make possible?</h1></div><span className={`goal-count ${goals.length >= 3 ? 'ready' : ''}`} aria-live="polite">{goals.length}<small>/5</small></span></div>
+    {!content ? <Skeleton /> : <div className="goal-wall">{content.futureGoals.map((g, i) => <button style={{ '--i': i } as React.CSSProperties} data-category={g.category} aria-pressed={goals.includes(g.label)} className={goals.includes(g.label) ? 'selected' : ''} onClick={() => choose(g.label)} key={g.id}><span>{goalIcon(g.category)}</span><b>{g.label}</b><i>{goals.includes(g.label) ? '✓' : '+'}</i></button>)}</div>}
+    <div className="goal-dock"><div className="custom-goal"><input aria-label="Add your own future goal" value={custom} onChange={e => setCustom(e.target.value)} onKeyDown={e => e.key === 'Enter' && addCustom()} placeholder="Add your own…" maxLength={36} /><button onClick={addCustom} aria-label="Add custom goal">+</button></div><div className="goal-progress" aria-hidden="true">{[0, 1, 2, 3, 4].map(i => <i className={i < goals.length ? 'filled' : ''} key={i} />)}</div><button className="primary goal-continue" disabled={goals.length < 3} onClick={next}>{goals.length < 3 ? `${3 - goals.length} more` : 'Make it real'} <span>→</span></button></div>
+  </article>;
+}
+
+function FutureSnapshot({ goals, data }: { goals: string[]; data: InvestResult | null }) {
+  const featured = goals.slice(0, 2).map(sceneForGoal);
+  return <article className="snapshot-stage snapshot-local"><div className="snapshot-visual snapshot-pair">{featured.map((scene, i) => <figure key={`${scene.src}-${i}`}><img src={scene.src} alt={scene.alt} /><figcaption>{goals[i]}</figcaption></figure>)}<div className="snapshot-overlay"><span>Two goals · one future</span><strong>{goals.slice(0, 2).join(' + ')}</strong></div><span className="snapshot-badge">Your Future Snapshot</span></div><div className="snapshot-copy"><span className="step-label">Built from your choices</span><h2>Picture both.</h2><p>Long-term choices can support more than one part of the life you want.</p>{data && <div className="metric-feature"><small>Possible monthly retirement spending · today’s dollars</small><b><Count value={data.projection.estimatedMonthlyIncome} /></b><span>rough 4% learning example—not a promise</span></div>}<div className="snapshot-goals">{goals.map(g => <span key={g}>{g}</span>)}</div><button className="primary" onClick={() => window.print()}>Save this vision <span>↓</span></button></div></article>;
+}
+
+function sceneForGoal(goal: string) {
+  const text = goal.toLowerCase();
+  if (/active|healthy|healthcare|outdoor/.test(text)) return { src: '/public/future-scenes/health-active.png', alt: 'An active older adult walking beside a community garden' };
+  if (/volunteer|community|purpose/.test(text)) return { src: '/public/future-scenes/community-purpose.png', alt: 'Neighbors volunteering together in a community garden' };
+  if (/hobb|art|learning/.test(text)) return { src: '/public/future-scenes/hobbies-learning.png', alt: 'An older adult enjoying art and lifelong learning' };
+  if (/family|friend|grand|loved|legacy|home/.test(text)) return { src: '/public/future-scenes/family-security.png', alt: 'A family sharing a calm morning in a comfortable home' };
+  if (/business|work|independence/.test(text)) return { src: '/public/future-scenes/career-creative.png', alt: 'A young adult opening a neighborhood creative studio' };
+  if (/travel|move/.test(text)) return { src: '/public/future-scenes/travel-freedom.png', alt: 'A young adult enjoying a calm morning in a coastal town' };
+  return { src: '/public/future-scenes/family-security.png', alt: 'A calm, secure morning at home' };
+}
+
+function shortAssetTitle(id: string) { return ({ stock: 'Stock', etf: 'ETF', bond: 'Bond' } as Record<string, string>)[id] || id; }
+function shortAssetCopy(id: string) { return ({ stock: 'A small piece of one company. Bigger swings.', etf: 'A basket of investments. Built-in variety.', bond: 'You lend money. Usually steadier.' } as Record<string, string>)[id] || ''; }
+function goalIcon(category: string) { return ({ security: '◒', freedom: '↗', lifestyle: '✦', family: '◎', achievement: '◇' } as Record<string, string>)[category] || '◇'; }
