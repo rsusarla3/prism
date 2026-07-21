@@ -1,20 +1,372 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>:root{font:14px/1.5 system-ui;color:#17201d;background:#f7f7f2}*{box-sizing:border-box}body{margin:0;padding:20px}.brand{font-size:23px;font-weight:850;margin-bottom:24px}.mark{background:#17201d;color:#d8ff63;border-radius:8px;padding:4px 8px}.eyebrow{text-transform:uppercase;letter-spacing:1.4px;color:#1e6b50;font-size:11px;font-weight:800}.card{background:white;border:1px solid #dfe3dc;border-radius:18px;padding:17px;margin:14px 0}.selection{max-height:130px;overflow:auto;white-space:pre-wrap}.muted{color:#66716d;font-size:12px}.goals{display:grid;gap:7px}button{border:1px solid #dfe3dc;background:white;border-radius:11px;padding:11px;text-align:left;font:inherit;font-weight:700;cursor:pointer}button:hover{border-color:#17201d}button.primary{background:#17201d;color:white;text-align:center}textarea{width:100%;min-height:85px;border:1px solid #dfe3dc;border-radius:11px;padding:10px;font:inherit;resize:vertical}.error{color:#9d351d;background:#fff0ed;border-radius:11px;padding:10px}
-.title{font-size:19px;margin:4px 0 0}
-.glosses{display:flex;flex-wrap:wrap;gap:6px;margin-top:9px}
-.gloss{border-bottom:2px dotted #1e6b50;cursor:help;font-weight:700;font-size:12px}
-.seg-id{margin-top:8px;font-size:11px}
-.script{margin:12px 0 0}
-.w.on{background:#d8ff63;border-radius:3px}
-.steps{margin:0;padding-left:19px}
-.steps li{margin-bottom:9px}
-.metric{margin-top:12px}
-.mname{font-weight:700;font-size:12px;margin-bottom:5px}
-.barrow{display:grid;grid-template-columns:66px 1fr 42px;align-items:center;gap:7px;margin-bottom:4px}
-.bname{font-size:11px}
-.bar{background:#eef0ea;border-radius:5px;height:11px;overflow:hidden}
-.fill{display:block;height:100%;background:#1e6b50}
-.bval{font-size:12px;font-weight:700;text-align:right}
-.fb{margin-top:10px;padding:10px;border-radius:11px;font-size:13px}
-.fb.ok{background:#eefbf1;color:#14532d}
-.fb.no{background:#fff6ed;color:#7c3a12}
-button.picked{border-color:#17201d;border-width:2px}</style></head><body><div class="brand"><span class="mark">◇</span> prism</div><div id="app">Loading…</div><script type="module" src="sidepanel.js"></script></body></html>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Prism</title>
+<style>
+  :root{
+    --bg:#07080f; --surface:#12162a; --surface-2:#1a2040;
+    --ink:#eef1ff; --muted:#8b93b8; --dim:#5f678f; --line:#242b4d;
+    --ray-1:#ff5f6d; --ray-2:#ff9f45; --ray-3:#ffd93d;
+    --ray-4:#3ddc97; --ray-5:#4aa8ff; --ray-6:#a06bff;
+    --font-mono:"SFMono-Regular",Consolas,"Liberation Mono",monospace;
+  }
+  *{box-sizing:border-box;}
+  [hidden]{display:none!important;}
+  html,body{min-height:100%; margin:0;}
+  body{
+    background:#05060b; color:var(--ink);
+    font:14px/1.5 ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  button,select{font:inherit;} button{cursor:pointer;}
+
+  .panel{
+    position:relative; width:100%; min-width:280px; min-height:100vh; overflow:hidden;
+    background:radial-gradient(ellipse 70% 36% at 50% 47%, rgba(80,91,196,.13), transparent 70%), var(--bg);
+    padding:0 18px 26px;
+  }
+
+  /* ---------------------------------------------------------------- header */
+  header{height:67px; border-bottom:1px solid var(--line); position:relative;
+    display:flex; align-items:flex-start; padding-top:16px;}
+  .brand{display:flex; align-items:center; gap:7px; font-size:20px; letter-spacing:-.065em; font-weight:650;}
+  .prism-mark{width:20px; height:19px;}
+  .header-status{margin-left:auto; display:flex; align-items:center; gap:13px;}
+  .language{display:block; margin:0; color:var(--dim); font-size:10.5px;}
+  .language select{appearance:none; background:transparent; border:0; color:#c8d0ef;
+    padding:0 4px 0 0; font-size:10.5px; text-decoration:underline; text-underline-offset:3px;}
+  .analyzed{display:flex; align-items:center; gap:5px; color:#8b93b8; font-size:10.5px;}
+  .analyzed i{width:5px; height:5px; border-radius:50%; background:var(--ray-4); box-shadow:0 0 7px var(--ray-4);}
+  .eyebrow{position:absolute; bottom:9px; color:var(--dim); font-size:9.5px; font-weight:700;
+    letter-spacing:.12em; text-transform:uppercase;}
+  .section-label{display:block; color:var(--dim); font-size:9.5px; font-weight:700;
+    letter-spacing:.12em; text-transform:uppercase; margin:18px 0 5px;}
+
+  /* ----------------------------------------------------------------- stage */
+  .stage{height:404px; position:relative; isolation:isolate;}
+
+  /* the page itself is the light source */
+  .source-chip{
+    width:max-content; max-width:100%; display:flex; align-items:center; gap:6px;
+    color:#eaf0ff; background:rgba(9,11,22,.82); border:1px solid rgba(154,170,255,.3);
+    box-shadow:0 0 18px rgba(202,218,255,.16), 0 2px 10px rgba(0,0,0,.5);
+    border-radius:99px; padding:3px 8px; font-size:9.5px;
+    /* It sits on the glass now, so it needs its own ground to stay readable. */
+    backdrop-filter:blur(5px); -webkit-backdrop-filter:blur(5px);
+  }
+  .source-chip i{width:5px; height:5px; border-radius:50%; background:#fff; box-shadow:0 0 8px #fff; flex:none;}
+  .source-chip code{font-family:var(--font-mono);}
+  /* The source now sits at the centre of the crystal, so there is no incoming
+     beam any more — light leaves in every direction instead of entering. */
+  .source-origin{position:absolute; z-index:5; left:50%; top:var(--core-y,50%);
+    transform:translate(-50%,-50%); white-space:nowrap;
+    transition:box-shadow .2s ease, border-color .2s ease;}
+  .source-origin:hover,.source-origin:focus-visible,.source-active .source-origin{
+    border-color:rgba(237,244,255,.5); box-shadow:0 0 26px rgba(225,235,255,.34);}
+  .source-halo{position:absolute; left:50%; top:var(--core-y,50%); width:132px; height:132px;
+    transform:translate(-50%,-50%); z-index:1; pointer-events:none; border-radius:50%;
+    background:radial-gradient(circle, rgba(190,210,255,.18), transparent 68%);}
+
+  /* Three nested rotations with co-prime periods: the crystal tumbles instead
+     of repeating a single sweep. Each layer owns one axis so the transforms
+     compose rather than overwrite one another. */
+  /* A hexagonal torus: the source sits in the bore. One axis only — the ring
+     turns in its own plane, so the hole stays put and the page never moves. */
+  .prism{position:absolute; left:50%; top:var(--core-y,50%); width:142px; height:142px;
+    transform:translate(-50%,-50%); z-index:2;
+    filter:drop-shadow(0 12px 18px rgba(1,2,13,.8)) drop-shadow(0 0 16px rgba(116,150,255,.13));}
+  .prism svg{display:block; width:100%; height:100%; overflow:visible;}
+  .hex{transform-box:fill-box; transform-origin:center;
+    animation:hexspin 45s linear infinite;}
+  @keyframes hexspin{to{transform:rotate(360deg);}}
+
+  /* One slow, constant-rate revolution. Linear timing on purpose: an eased
+     spin reads as a wobble, and anything faster reads as a loading spinner. */
+  .rays{position:absolute; inset:0; width:100%; height:100%; z-index:0; overflow:visible;}
+  .rays path{fill:none; stroke-width:2; filter:drop-shadow(0 0 5px currentColor);
+    transition:opacity .2s ease, stroke-width .2s ease;
+    animation:raysweep 45s linear infinite; animation-delay:var(--phase,0s);}
+  /* Each ray brightens once per revolution, as the face turns to face it. The
+     floor never returns to zero, so this is a sweep and not a pulse. */
+  @keyframes raysweep{
+    0%{opacity:1; stroke-width:3.4; animation-timing-function:linear;}
+    14%{opacity:1; stroke-width:3.4; animation-timing-function:cubic-bezier(.45,0,.35,1);}
+    22%{opacity:.22; stroke-width:1.8; animation-timing-function:linear;}
+    92%{opacity:.22; stroke-width:1.8; animation-timing-function:cubic-bezier(.65,0,.55,1);}
+    100%{opacity:1; stroke-width:3.4;}
+  }
+  }
+  /* --lit has to be a registered custom property or it cannot be animated:
+     unregistered ones flip at the halfway point instead of interpolating. */
+  @property --lit{syntax:'<number>'; inherits:false; initial-value:1;}
+  .way{animation:cardsweep 45s linear infinite; animation-delay:var(--phase,0s);}
+  /* Five modes over one turn: each owns 20% of the cycle.
+     The fall of one card (14%–22%) overlaps the rise of the next (92%–100% of
+     its own, earlier-delayed cycle), so the two cross rather than hand over.
+     Per-keyframe easing matters as much as the overlap: a linear ramp reads as
+     a switch even when it is gradual, because it starts and stops abruptly. */
+  @keyframes cardsweep{
+    0%{--lit:1.3; border-color:var(--mode); background:color-mix(in srgb,var(--mode) 14%,#12162a);
+       box-shadow:0 0 0 1px var(--mode), 0 0 26px color-mix(in srgb,var(--mode) 55%,transparent),
+                  0 12px 30px rgba(0,0,0,.45); animation-timing-function:linear;}
+    14%{--lit:1.3; border-color:var(--mode); background:color-mix(in srgb,var(--mode) 14%,#12162a);
+       box-shadow:0 0 0 1px var(--mode), 0 0 26px color-mix(in srgb,var(--mode) 55%,transparent),
+                  0 12px 30px rgba(0,0,0,.45); animation-timing-function:cubic-bezier(.45,0,.35,1);}
+    22%{--lit:1; border-color:var(--line); background:rgba(18,22,42,.97);
+       box-shadow:0 8px 20px rgba(0,0,0,.19); animation-timing-function:linear;}
+    92%{--lit:1; border-color:var(--line); background:rgba(18,22,42,.97);
+       box-shadow:0 8px 20px rgba(0,0,0,.19); animation-timing-function:cubic-bezier(.65,0,.55,1);}
+    100%{--lit:1.3; border-color:var(--mode); background:color-mix(in srgb,var(--mode) 14%,#12162a);
+       box-shadow:0 0 0 1px var(--mode), 0 0 26px color-mix(in srgb,var(--mode) 55%,transparent),
+                  0 12px 30px rgba(0,0,0,.45);}
+  }
+  }
+
+  /* The moment the pointer is involved, the sweep hands over to the user:
+     freeze the cycle and let hover decide what is lit. */
+  .stage.focusing .rays path,.stage.focusing .way{animation-play-state:paused;}
+  .stage.focusing .rays path{opacity:.3; stroke-width:2;}
+  .stage.focusing .rays path.on{opacity:1; stroke-width:3.2;}
+  .rays path.dim{opacity:.3;}
+  .rays path.on{stroke-width:3;}
+
+  /* The white ray inside the bore, turning clockwise at the ring's own rate.
+     It is the cause the outer highlight reads as an effect: whichever mode it
+     points at is the one lit. */
+  .sweeper{animation:sweep 45s linear infinite;}
+  @keyframes sweep{to{transform:rotate(360deg);}}
+  .sweep-track{stroke:rgba(226,238,255,.18); stroke-width:1;}
+  /* Pulses travel outward from the page. pathLength normalises the dash maths
+     so the same values work whatever the panel width makes the radius. */
+  .sweep-pulse{stroke:#fff; stroke-width:2.4; stroke-linecap:round;
+    stroke-dasharray:16 84; filter:drop-shadow(0 0 7px rgba(226,238,255,.95));
+    animation:emit 1.6s linear infinite;}
+  @keyframes emit{
+    from{stroke-dashoffset:16; opacity:0;}
+    18%{opacity:1;}
+    75%{opacity:1;}
+    to{stroke-dashoffset:-84; opacity:0;}
+  }
+  /* Hovering hands control to the pointer, so the sweeper stands down. */
+  .stage.focusing .sweeper{animation-play-state:paused; opacity:.2;}
+  .stage.focusing .sweep-pulse{animation-play-state:paused;}
+
+  /* ------------------------------------------------------------ mode cards */
+  /* The five modes are placed around the prism rather than listed. Scale is
+     driven by pointer proximity (see bindMagnify in sidepanel.js), so the
+     resting cards can stay small without the panel feeling cramped. */
+  .mode-grid{position:absolute; inset:0; z-index:3;}
+  .way{
+    --mode:#fff; --scale:1; --nudge:0px; position:absolute; background:rgba(18,22,42,.97);
+    border:1px solid var(--line); border-radius:9px; color:var(--ink); text-align:left;
+    padding:7px 17px 7px 10px; min-height:0; width:28%; max-width:100px;
+    box-shadow:0 8px 20px rgba(0,0,0,.19); transform:translate(-50%,-50%) scale(calc(var(--scale) * var(--lit,1)));
+    transition:background .18s ease, border-color .18s ease, box-shadow .18s ease;
+    will-change:transform;
+  }
+  .way:hover,.way:focus-visible{background:var(--surface-2);
+    border-color:color-mix(in srgb,var(--mode),var(--line) 60%); outline:2px solid transparent;
+    box-shadow:0 10px 26px rgba(0,0,0,.3);}
+  /* No pointer to track: fall back to a plain hover lift. */
+  @media(hover:none){ .way{transform:translate(-50%,-50%) scale(var(--lit,1));} }
+  .way .bar{position:absolute; width:2.5px; top:8px; bottom:8px; background:var(--mode); border-radius:2px; left:0;}
+  .way[data-way="quiz"] .bar{right:0; left:auto;}
+  .way b{font-size:12px; font-weight:650; display:block; line-height:1.25;}
+  /* The hint is held back until hover/focus: the resting panel is five short
+     labels, and the card grows downward so the ray anchored to its top edge
+     does not move. */
+  .way small{color:var(--muted); display:block; font-size:10px; line-height:1.3;
+    max-height:0; margin-top:0; opacity:0; overflow:hidden;
+    transition:max-height .2s ease, margin-top .2s ease, opacity .16s ease;}
+  .way:hover small,.way:focus-visible small{max-height:48px; margin-top:5px; opacity:1;}
+  .way .arrow{position:absolute; right:7px; top:8px; color:var(--dim); font-size:10px; opacity:.5;}
+
+
+
+  .footnote{border-top:1px solid var(--line); color:var(--dim); font-size:10.5px; margin:13px 0 0; padding-top:12px;}
+
+  /* --------------------------------------------------------- result views */
+  .result-source{display:flex; align-items:center; gap:6px; width:max-content; max-width:100%;
+    margin:18px 0 18px; padding:5px 9px; border:1px solid rgba(154,170,255,.16); border-radius:99px;
+    background:rgba(255,255,255,.025); box-shadow:0 0 15px rgba(202,218,255,.09);
+    color:var(--dim); font-family:var(--font-mono); font-size:9.5px;}
+  .result-source code{color:#dce2ff;}
+  .result-source .mini-light{width:5px; height:5px; border-radius:50%; background:#fff; box-shadow:0 0 8px #fff;}
+  .result-source .plain{font-family:ui-sans-serif,system-ui,sans-serif;}
+
+  /* "Back" with an arrow that drifts left, so the affordance reads at a glance
+     instead of being a dim line of text. */
+  .back{display:inline-flex; align-items:center; gap:7px; margin:16px 0 4px;
+    padding:6px 13px 6px 10px; border:1px solid var(--line); border-radius:99px;
+    background:rgba(255,255,255,.04); color:var(--ink); font-size:12px; font-weight:600;
+    transition:background .16s ease, border-color .16s ease;}
+  .back:hover{background:var(--surface-2); border-color:#3a4478;}
+  .back .glyph{font-size:13px; line-height:1; animation:levitate 1.5s ease-in-out infinite;}
+  .back:hover .glyph{animation-duration:.9s;}
+  @keyframes levitate{0%,100%{transform:translateX(0)}50%{transform:translateX(-4px)}}
+
+  .out{position:relative; border:1px solid var(--line); border-radius:12px;
+    background:linear-gradient(150deg,rgba(26,32,64,.8),rgba(18,22,42,.9)); padding:22px; overflow:hidden;}
+  .out:before{content:""; position:absolute; left:0; top:18px; bottom:18px; width:3px;
+    background:var(--mode,var(--ray-6)); border-radius:0 3px 3px 0;}
+  .result-head{display:flex; align-items:center; gap:7px; color:var(--mode,var(--ray-6));
+    font-size:9.5px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; margin-bottom:12px;}
+  .result-head .mode-dot{width:6px; height:6px; border-radius:50%; background:var(--mode,var(--ray-6));
+    box-shadow:0 0 9px var(--mode,var(--ray-6));}
+  .result-head small{margin-left:auto; font-size:9px; letter-spacing:0; text-transform:none; color:var(--dim);}
+  .out h3{font-size:19px; line-height:1.2; letter-spacing:-.035em; margin:0 0 17px; font-weight:650;}
+  .out ul{margin:0; padding-left:17px;}
+  .out li{margin:0 0 8px; font-size:12.5px; color:#cdd3ed;}
+
+  .summary-points{border-top:1px solid var(--line);}
+  .summary-points p{border-bottom:1px solid var(--line); color:#cdd3ed; margin:0; padding:12px 0; font-size:12px;
+    display:grid; grid-template-columns:22px 1fr; gap:8px;}
+  .summary-points b{width:20px; height:20px; border-radius:50%; display:grid; place-items:center;
+    background:var(--surface-2); color:var(--ink); font-size:10px;}
+
+  .term-grid{border-top:1px solid var(--line);}
+  /* These are <button>s: without an explicit background they pick up the UA
+     ButtonFace fill, which washed the labels out to near-white on white. */
+  .term{display:flex; align-items:center; justify-content:space-between; gap:10px;
+    width:100%; padding:11px 2px; background:transparent; border:0;
+    border-bottom:1px solid var(--line); color:var(--ink); text-align:left;
+    border-radius:0; transition:background .15s ease, padding .15s ease;}
+  .term:hover{background:rgba(255,255,255,.035); padding-left:7px; padding-right:7px;}
+  .term.active{background:color-mix(in srgb,var(--mode,var(--ray-3)) 12%, transparent);
+    padding-left:7px; padding-right:7px;}
+  .term span{color:var(--ink); font-size:12px; font-weight:650;}
+  .term b{color:var(--muted); font-size:10px; font-weight:600; font-family:var(--font-mono); flex:none;}
+  .term.active span{color:#fff;}
+  .term p,.term-context{color:var(--muted); font-size:11.5px; margin:3px 0 0;}
+  .term-context{margin-top:14px; padding-top:12px; border-top:1px solid var(--line);}
+  .term-context b{color:var(--ink); font-size:12px; display:block; margin-bottom:3px;}
+  .term-context small{color:var(--dim); font-size:10px; display:block; margin-top:5px;}
+
+  /* conceptMapSvg() emits real SVG, so these are SVG presentation rules —
+     the HTML div treatment from the mock left the map completely unstyled. */
+  .concept-map{display:block; width:100%; height:auto; background:rgba(7,8,15,.32);
+    border:1px solid var(--line); border-radius:9px; overflow:visible;}
+  .concept-map path{stroke:var(--mode,var(--ray-4)); stroke-width:1.2; opacity:.5; fill:none;}
+  .concept-map g rect{fill:var(--surface-2); stroke:var(--line); stroke-width:1;}
+  .concept-map g text{fill:var(--ink); font:600 10px ui-sans-serif,system-ui; text-anchor:middle;}
+  .concept-map rect.map-center{fill:var(--surface); stroke:var(--mode,var(--ray-4)); stroke-width:1.4;}
+  .concept-map text.map-title{fill:var(--ink); font:700 11px ui-sans-serif,system-ui;
+    text-anchor:middle; letter-spacing:.02em;}
+  .concept-map text.map-title.small{fill:var(--muted); font:400 9px ui-sans-serif,system-ui;
+    letter-spacing:0;}
+  .visual-caption{color:var(--muted); font-size:11.5px; margin:10px 0 0;}
+
+  .transport,.listen-controls{display:flex; align-items:center; gap:11px; background:#0b0d18;
+    border:1px solid var(--line); border-radius:10px; padding:12px; margin-top:4px;}
+  .transport button,.listen-controls button{border:0; border-radius:99px; background:var(--mode,var(--ray-5));
+    color:#07080f; font-weight:800; padding:7px 12px; font-size:11px;}
+  .voice-status{color:var(--muted); font-family:var(--font-mono); font-size:10px;}
+
+  .quiz-list{display:grid; gap:14px;}
+  .quiz-item{padding-bottom:14px; border-bottom:1px solid var(--line);}
+  .quiz-item:last-child{border:0; padding-bottom:0;}
+  .question-count{font-size:9px; color:var(--dim); margin:0 0 5px; letter-spacing:.1em; text-transform:uppercase;}
+  .quiz-options{display:grid; gap:7px; margin-top:9px;}
+  .quiz-options button{display:flex; align-items:center; gap:9px; background:#0c0f1d;
+    border:1px solid var(--line); border-radius:8px; color:#cbd1ea; padding:10px; text-align:left; font-size:11.5px;}
+  .quiz-options button:not(:disabled):hover{border-color:var(--ray-6);}
+  .quiz-options button.active,.quiz-options button.selected{border-color:var(--ray-6);
+    box-shadow:0 0 0 1px rgba(160,107,255,.18);}
+  .quiz-options button.correct{border-color:var(--ray-4); background:color-mix(in srgb,var(--ray-4) 12%,#0c0f1d);}
+  .quiz-options button.wrong{border-color:var(--ray-1); background:color-mix(in srgb,var(--ray-1) 12%,#0c0f1d);}
+  .quiz-feedback{border-left:3px solid var(--ray-4); background:rgba(61,220,151,.07);
+    padding:10px; margin-top:10px; font-size:11.5px; color:#7eebba;}
+  .quiz-explanation{color:var(--muted); font-size:10.5px; display:block; margin-top:4px;}
+  .submit{background:var(--ray-6); color:#100b20; border:0; border-radius:7px; width:100%;
+    padding:10px; font-weight:700; font-size:12px; margin-top:12px;}
+  .submit:disabled{opacity:.35; cursor:not-allowed;}
+
+  .locked{display:flex; gap:10px; border:1px solid rgba(255,159,69,.7); border-radius:8px;
+    margin-top:13px; padding:10px; color:#f8c37d;}
+  .locked b{font-size:11px;} .locked p{font-size:10.5px; color:#bf9263; margin:2px 0 0;}
+
+  .segmented{display:flex; gap:4px; margin-top:14px; padding:3px; background:var(--bg); border-radius:8px;}
+  .segmented button{flex:1; border:0; background:transparent; color:var(--muted); padding:5px;
+    border-radius:6px; font-size:10px;}
+  .segmented button.active{background:var(--surface-2); color:var(--ink);}
+
+  .fig{font:600 12px var(--font-mono); background:var(--surface-2); border:1px solid var(--line);
+    border-radius:6px; padding:4px 8px; cursor:pointer; color:var(--ink);}
+  .note{margin:12px 1px 0; font-size:10.5px; color:var(--dim);}
+  .err{color:var(--ray-2); font-size:12.5px;}
+  .small,.subtle{font-size:11px; color:var(--dim);}
+
+  .loading{min-height:230px; display:grid; place-content:center; text-align:center; color:var(--muted);}
+  .loading i{width:28px; height:28px; border:2px solid var(--line); border-top-color:var(--ray-5);
+    border-radius:50%; margin:auto; animation:spin .8s linear infinite;}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  /* ----------------------------------------------------------- responsive */
+  /* A side panel is usually ~400px. At that width two 46% cards leave less
+     room than the prism is wide, so they cover the glass and swallow the
+     origins of the Quiz and Listen rays. Narrow both below 480px. */
+  @media(max-width:479px){
+    .prism{width:134px; height:134px;}
+    .way{width:28%; max-width:96px;}
+  }
+
+  @media(max-width:340px){
+    .panel{padding-left:12px; padding-right:12px;}
+    .stage{height:432px;}
+    .header-status{gap:7px;} .analyzed{font-size:9.5px;}
+    .way{padding-left:9px; padding-right:16px;}
+    .way small{font-size:10.5px;}
+  }
+  /* Too narrow for a constellation: stack, and let the rays resolve to nothing. */
+  @media(max-width:320px){
+    .stage{display:flex; flex-direction:column; gap:12px; height:auto; padding-bottom:24px;}
+    .prism{position:relative; top:0; left:auto; margin:30px auto; transform:none;}
+    .beam,.stream-words{position:relative; top:0; left:auto; margin:0 auto; transform:none;}
+    .rays{display:none;}
+    .mode-grid{position:relative; inset:auto; display:flex; flex-direction:column; gap:12px;}
+    .way{position:relative; top:auto!important; left:auto!important; right:auto!important;
+      width:100%!important; max-width:none!important; transform:none!important;}
+    .source-origin{position:relative; top:0; transform:none!important; margin:0 auto 10px;}
+  }
+  @media(min-width:600px){
+    .panel{max-width:600px; margin:0 auto; padding-left:30px; padding-right:30px;
+      border-left:1px solid var(--line); border-right:1px solid var(--line);
+      box-shadow:0 0 40px rgba(0,0,0,.5);}
+    .stage{height:470px;}
+    .way{max-width:170px;}
+  }
+  @media(prefers-reduced-motion:reduce){
+    .beam i,.stream-words span{animation:none; display:none;}
+    .hex,.rays path,.way{animation:none;}
+    .rays path{opacity:.85;}
+    .way,.rays path{transition:none;}
+  }
+</style>
+</head>
+<body>
+  <main class="panel">
+    <header>
+      <div class="brand">
+        <svg class="prism-mark" aria-hidden="true" viewBox="0 0 26 24">
+          <path d="M13 2 24 21H2L13 2Z" fill="url(#wordmark-gradient)"/>
+          <path d="M13 2v19M2 21l11-6 11 6" stroke="#07080f" stroke-opacity=".65" stroke-width="1"/>
+          <defs><linearGradient id="wordmark-gradient" x1="2" y1="21" x2="24" y2="4" gradientUnits="userSpaceOnUse">
+            <stop stop-color="#ff5f6d"/><stop offset=".31" stop-color="#ffd93d"/>
+            <stop offset=".6" stop-color="#3ddc97"/><stop offset="1" stop-color="#a06bff"/>
+          </linearGradient></defs>
+        </svg>
+        <span>prism</span>
+      </div>
+      <div class="header-status">
+        <label class="language"><select id="output-language" aria-label="Output language"></select></label>
+        <span class="analyzed"><i></i><span id="analyzed-text">Ready</span></span>
+      </div>
+      <div class="eyebrow">The page you're on</div>
+    </header>
+    <div id="app"></div>
+  </main>
+  <script type="module" src="sidepanel.js"></script>
+</body>
+</html>

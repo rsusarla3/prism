@@ -24,7 +24,7 @@ Before returning your answer, self-check silently and correct any violation you 
 - Does meta.droppedForCoherence list what stage 0 removed?
 - Is explore non-empty, and does it include a data block if the passage compares any quantities?
 - Does listen.segmentIndex point at every read segment, so no segment is left without narration?
-- Is every gloss definition 12 words or fewer, and is at least one term glossed?
+- Is every included gloss definition 12 words or fewer?
 
 Your output must be exactly one JSON object matching the StudyBundle shape, with top-level keys meta, read, listen, watch, explore, quiz — and nothing else. No prose, no markdown fences, no commentary outside the JSON object.`;
 
