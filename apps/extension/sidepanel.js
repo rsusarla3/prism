@@ -1,4 +1,4 @@
-import { analyzeContent, createLocalQuiz } from './content-analysis.js';
+import { analyzeContent, createLocalQuiz, summarizeText } from './content-analysis.js';
 import { DEFAULT_API_BASE, normalizeApiBase } from './config.js';
 import { redactSensitiveText } from './privacy.js';
 
@@ -242,7 +242,7 @@ function backButton() {
 async function showSummary() {
   renderLoading('Finding the signal…');
   await ensureSource();
-  let points = analysis.summary;
+  let points = summarizeText(pageSource.text, { headings: page?.headings || [], language: analysis.language, limit: 8 });
   let source = 'Instant extractive summary';
   try {
     const asset = await requestGeneratedAsset('read');
@@ -252,7 +252,7 @@ async function showSummary() {
   const translated = await translateValues(points);
   points = translated.values;
   finishResult(`<div class="result-head"><span>Summarize</span><small>${esc(source)}</small></div>
-    <h3>${esc(pageSource.title)}</h3><div class="summary-points">${points.map((point, index) => `<p data-summary="${index}"><b>${index + 1}</b>${esc(point)}</p>`).join('')}</div>
+    <h3>${esc(pageSource.title)}</h3><div class="summary-points">${points.map((point, index) => `<p data-summary="${index}"${index >= 4 ? ' hidden' : ''}><b>${index + 1}</b>${esc(point)}</p>`).join('')}</div>
     <div class="segmented" role="group" aria-label="Summary length"><button data-length="2">Short</button><button class="active" data-length="4">Standard</button><button data-length="99">All</button></div>`, translated.note || `${analysis.wordCount.toLocaleString()} source words distilled into ${points.length} points.`);
   document.querySelectorAll('[data-length]').forEach((button) => button.addEventListener('click', () => {
     const limit = Number(button.dataset.length);
@@ -410,7 +410,7 @@ function devShim() {
   const text = `Photosynthesis lets plants turn light energy into chemical energy stored in glucose. Chlorophyll absorbs light inside chloroplasts. During photosynthesis, plants use carbon dioxide and water to form glucose and oxygen. Light-dependent reactions capture energy while the Calvin cycle helps assemble sugar molecules. The rate of photosynthesis changes with light intensity, carbon dioxide concentration, and temperature. Plants use glucose for growth and cellular respiration.`;
   globalThis.chrome = {
     tabs: { query: async () => [{ id: 1, url: 'https://example.edu/biology/photosynthesis', title: 'How photosynthesis works' }], create: ({ url }) => window.open(url, '_blank'), onActivated: { addListener() {} }, onUpdated: { addListener() {} } },
-    scripting: { executeScript: async () => [{ result: { language: 'en', headings: ['How photosynthesis works', 'Light-dependent reactions', 'The Calvin cycle'] } }] },
+    scripting: { executeScript: async () => [{ result: { url: 'https://example.edu/biology/photosynthesis', title: 'How photosynthesis works', language: 'en', headings: ['How photosynthesis works', 'Light-dependent reactions', 'The Calvin cycle'] } }] },
     storage: { session: { get: async () => ({}), set: async () => {}, remove: async () => {} }, local: { get: async () => ({}), set: async () => {} } },
     runtime: { id: '', sendMessage: async () => ({ source: { url: 'https://example.edu/biology/photosynthesis', title: 'How photosynthesis works', language: 'en', text, capturedAt: new Date().toISOString() } }) },
   };

@@ -8,6 +8,7 @@ yours yourself yourselves about above after again against all am any because bef
 both down during each few further here off ought please via within without yes yet
 click continue cookie cookies copyright home login menu next page previous privacy read register
 search share sign site submit subscribe terms website welcome www
+according added among aren't around competition explained expert experts field fields going harming less like likely many million news others people pronounced say said says since thing things think told
 `.trim().split(/\s+/));
 
 const SPANISH_STOP_WORDS = new Set(`
@@ -61,14 +62,30 @@ export function normalizeText(value) {
   return String(value ?? '').normalize('NFKC').replace(/\s+/gu, ' ').trim();
 }
 
+export function isLikelyMetadataSentence(value) {
+  const text = normalizeText(value);
+  if (!text) return true;
+  if (/^(?:by|edited by)\s+[\p{L} .'-]{2,80}$/iu.test(text)) return true;
+  if (/^(?:updated|published)?\s*(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+\d{1,2},\s+\d{4}\b.*(?:\b(?:am|pm)\b|\/|news)/iu.test(text)) return true;
+  if (/^(?:copyright\s*)?©?\s*\d{4}\b.*(?:all rights reserved|interactive|inc\.?)/iu.test(text)) return true;
+  return false;
+}
+
 export function splitSentences(text, language = 'en') {
-  const normalized = normalizeText(text);
-  const pieces = typeof Intl?.Segmenter === 'function'
-    ? [...new Intl.Segmenter(language, { granularity: 'sentence' }).segment(normalized)].map(({ segment }) => segment)
-    : normalized.split(/(?<=[.!?。！？])\s*/u);
+  const paragraphs = String(text ?? '').normalize('NFKC').split(/\n{2,}/u).map(normalizeText).filter(Boolean);
+  const segmenter = typeof Intl?.Segmenter === 'function' ? new Intl.Segmenter(language, { granularity: 'sentence' }) : null;
+  const segmentedPieces = paragraphs.flatMap((paragraph) => segmenter
+    ? [...segmenter.segment(paragraph)].map(({ segment }) => segment)
+    : paragraph.split(/(?<=[.!?。！？])\s*/u));
+  const pieces = [];
+  for (const piece of segmentedPieces) {
+    if (pieces.length && /\b(?:U\.S|U\.K|Dr|Mr|Mrs|Ms|Prof|St)\.$/u.test(pieces[pieces.length - 1].trim())) pieces[pieces.length - 1] += ` ${piece}`;
+    else pieces.push(piece);
+  }
   return pieces
     .map((sentence) => sentence.trim())
-    .filter((sentence) => sentence.length >= 20 && sentence.length <= 520);
+    .filter((sentence) => sentence.length >= 20 && sentence.length <= 520)
+    .filter((sentence) => !isLikelyMetadataSentence(sentence));
 }
 
 function tokenize(text, language = 'en') {
@@ -76,12 +93,23 @@ function tokenize(text, language = 'en') {
   if (typeof Intl?.Segmenter === 'function') {
     return [...new Intl.Segmenter(language, { granularity: 'word' }).segment(normalized)]
       .filter(({ isWordLike }) => isWordLike)
-      .map(({ segment: surface }) => ({ surface, lower: surface.toLocaleLowerCase() }));
+      .map(({ segment: surface, index }) => ({ surface, lower: surface.toLocaleLowerCase(), index, end: index + surface.length }));
   }
-  return normalized.match(/[\p{L}\p{N}][\p{L}\p{N}'’-]*/gu)?.map((surface) => ({
-      surface,
-      lower: surface.toLocaleLowerCase(),
-    })) ?? [];
+  return [...normalized.matchAll(/[\p{L}\p{N}][\p{L}\p{N}'’-]*/gu)].map((match) => ({
+    surface: match[0], lower: match[0].toLocaleLowerCase(), index: match.index, end: match.index + match[0].length,
+  }));
+}
+
+function isHeadingLike(sentence, headings) {
+  const normalized = normalizeText(sentence).toLocaleLowerCase();
+  return headings.some((heading) => {
+    const candidate = normalizeText(heading).toLocaleLowerCase();
+    return normalized === candidate || (normalized.length >= 18 && candidate.includes(normalized)) || (candidate.length >= 18 && normalized.includes(candidate));
+  });
+}
+
+function hasBalancedQuotes(sentence) {
+  return (sentence.match(/["“”]/gu)?.length ?? 0) % 2 === 0;
 }
 
 function canonical(word, language = 'en') {
@@ -152,24 +180,31 @@ export function extractKeyTerms(text, { headings = [], limit = 12, language = ''
   const headingText = headings.map(normalizeText).join(' ').toLocaleLowerCase();
   const candidates = new Map();
 
-  sentences.forEach((sentence, sentenceIndex) => {
-    const useful = tokenize(sentence, resolvedLanguage).filter((token) => isUseful(token, stopWords, resolvedLanguage));
+  sentences.filter((sentence) => !isHeadingLike(sentence, headings)).forEach((sentence, sentenceIndex) => {
+    const sentenceTokens = tokenize(sentence, resolvedLanguage);
+    const useful = sentenceTokens.filter((token) => isUseful(token, stopWords, resolvedLanguage));
     useful.forEach((token) => {
       const key = canonical(token.lower, resolvedLanguage);
       const headingBoost = headingText.includes(token.lower) ? 2.2 : 1;
       const positionBoost = sentenceIndex < 2 ? 1.25 : 1;
       addCandidate(candidates, key, token.surface, headingBoost * positionBoost, sentence);
     });
-    for (let index = 0; index < useful.length - 1; index += 1) {
-      const first = useful[index];
-      const second = useful[index + 1];
+    for (let index = 0; index < sentenceTokens.length - 1; index += 1) {
+      const first = sentenceTokens[index];
+      const second = sentenceTokens[index + 1];
+      if (!isUseful(first, stopWords, resolvedLanguage) || !isUseful(second, stopWords, resolvedLanguage)) continue;
+      if (!/^[\s-]*$/u.test(sentence.slice(first.end, second.index))) continue;
       const key = `${canonical(first.lower, resolvedLanguage)} ${canonical(second.lower, resolvedLanguage)}`;
       const surface = `${first.surface} ${second.surface}`;
       const headingBoost = headingText.includes(surface.toLocaleLowerCase()) ? 2.4 : 1;
-      addCandidate(candidates, key, surface, 2.1 * headingBoost, sentence);
+      const positionBoost = sentenceIndex < 2 ? 1.3 : 1;
+      const longSentencePenalty = sentence.length > 320 ? 0.55 : 1;
+      addCandidate(candidates, key, surface, 2.4 * headingBoost * positionBoost * longSentencePenalty, sentence);
     }
-    for (let index = 0; index < useful.length - 2; index += 1) {
-      const group = useful.slice(index, index + 3);
+    for (let index = 0; index < sentenceTokens.length - 2; index += 1) {
+      const group = sentenceTokens.slice(index, index + 3);
+      if (!group.every((token) => isUseful(token, stopWords, resolvedLanguage))) continue;
+      if (!/^[\s-]*$/u.test(sentence.slice(group[0].end, group[1].index)) || !/^[\s-]*$/u.test(sentence.slice(group[1].end, group[2].index))) continue;
       const key = group.map((token) => canonical(token.lower, resolvedLanguage)).join(' ');
       const surface = group.map((token) => token.surface).join(' ');
       const headingBoost = headingText.includes(surface.toLocaleLowerCase()) ? 2.6 : 1;
@@ -177,8 +212,25 @@ export function extractKeyTerms(text, { headings = [], limit = 12, language = ''
     }
   });
 
+  // Section headings often state the author's own conceptual organization.
+  // Seed phrases from subheadings (not the page title) without returning the
+  // complete heading as a quiz sentence.
+  headings.slice(1).forEach((heading) => {
+    const tokens = tokenize(normalizeText(heading), resolvedLanguage);
+    for (let index = 0; index < tokens.length - 1; index += 1) {
+      const first = tokens[index];
+      const second = tokens[index + 1];
+      if (!isUseful(first, stopWords, resolvedLanguage) || !isUseful(second, stopWords, resolvedLanguage)) continue;
+      if (!/^[\s-]*$/u.test(heading.slice(first.end, second.index))) continue;
+      addCandidate(candidates, `${canonical(first.lower, resolvedLanguage)} ${canonical(second.lower, resolvedLanguage)}`, `${first.surface} ${second.surface}`, 7, heading);
+    }
+  });
+
   const entries = [...candidates.entries()]
-    .filter(([key, value]) => !key.includes(' ') || value.count >= 2)
+    .filter(([key, value]) => {
+      const wordCount = key.split(' ').length;
+      return wordCount === 1 || value.count >= 2 || headingText.includes(bestSurface(value.surfaces).toLocaleLowerCase()) || (wordCount === 2 && value.score >= 2.4);
+    })
     .map(([key, value]) => ({
       key,
       term: bestSurface(value.surfaces),
@@ -187,9 +239,17 @@ export function extractKeyTerms(text, { headings = [], limit = 12, language = ''
       contexts: value.contexts,
     }));
 
+  const singleCounts = new Map(entries.filter((entry) => !entry.key.includes(' ')).map((entry) => [entry.key, entry.count]));
   const phraseRoots = new Set(entries.filter((entry) => entry.key.includes(' ')).flatMap((entry) => entry.key.split(' ')));
   const ranked = entries
-    .map((entry) => ({ ...entry, score: entry.score + (entry.key.includes(' ') ? 2.5 : phraseRoots.has(entry.key) ? -1.2 : 0) }))
+    .filter((entry) => entry.key.includes(' ') || !/^\p{Lu}[\p{Ll}'’-]+$/u.test(entry.term) || headingText.includes(entry.term.toLocaleLowerCase()))
+    .filter((entry) => !entry.key.includes(' ') || !/^\p{Lu}[\p{L}.]*\s+\p{Lu}[\p{L}.]*$/u.test(entry.term))
+    .map((entry) => {
+      const phraseSignal = entry.key.includes(' ')
+        ? entry.key.split(' ').reduce((score, word) => score + Math.log2((singleCounts.get(word) ?? 0) + 1), 6)
+        : phraseRoots.has(entry.key) ? -4 : 0;
+      return { ...entry, score: entry.score + phraseSignal };
+    })
     .sort((a, b) => b.score - a.score || b.count - a.count || a.term.localeCompare(b.term));
   const selected = [];
   for (const entry of ranked) {
@@ -197,45 +257,75 @@ export function extractKeyTerms(text, { headings = [], limit = 12, language = ''
     const overlaps = selected.some((chosen) => {
       const chosenWords = chosen.key.split(' ');
       const nested = words.every((word) => chosenWords.includes(word)) || chosenWords.every((word) => words.includes(word));
-      const shared = words.filter((word) => chosenWords.includes(word)).length;
-      const substantiallyOverlaps = shared / Math.min(words.length, chosenWords.length) >= 0.5;
-      return (nested || substantiallyOverlaps) && chosen.count >= Math.max(2, entry.count * 0.6);
+      return nested;
     });
     if (!overlaps) selected.push(entry);
     if (selected.length >= limit) break;
   }
   const repeated = selected.filter((entry) => entry.count >= 2);
-  return (repeated.length >= 5 ? repeated : selected).slice(0, limit);
+  return (repeated.length >= limit ? repeated : selected).slice(0, limit);
 }
 
 export function summarizeText(text, { limit = 4, headings = [], language = '' } = {}) {
   const resolvedLanguage = detectLanguage(text, language);
-  const sentences = splitSentences(text, resolvedLanguage);
+  const sentences = splitSentences(text, resolvedLanguage)
+    .filter((sentence) => !isHeadingLike(sentence, headings))
+    .filter(hasBalancedQuotes)
+    .filter((sentence) => sentence.split(/\s+/u).length >= 5);
   if (sentences.length <= limit) return sentences;
   const terms = extractKeyTerms(text, { headings, limit: 10, language: resolvedLanguage });
   const ranked = sentences.map((sentence, index) => {
     const lower = sentence.toLocaleLowerCase();
     const conceptScore = terms.reduce((score, term) => score + (lower.includes(term.term.toLocaleLowerCase()) ? term.score : 0), 0);
     const positionScore = index === 0 ? 4 : index < 3 ? 2 : 0;
-    const lengthPenalty = sentence.length > 330 ? 2 : 0;
+    const lengthPenalty = sentence.length > 320 ? 5 : sentence.length > 240 ? 2 : 0;
     return { sentence, index, score: conceptScore + positionScore - lengthPenalty };
   });
-  return ranked.sort((a, b) => b.score - a.score).slice(0, limit).sort((a, b) => a.index - b.index).map((item) => item.sentence);
+  const selected = ranked.length ? [ranked[0]] : [];
+  const targetCount = Math.min(limit, ranked.length);
+  const normalizedSource = normalizeText(text).toLocaleLowerCase();
+  const boundaries = headings.slice(1).map((heading) => normalizedSource.indexOf(normalizeText(heading).toLocaleLowerCase())).filter((index) => index >= 0).sort((a, b) => a - b);
+  if (boundaries.length && selected.length < targetCount) {
+    const bySection = new Map();
+    ranked.slice(1).forEach((item) => {
+      const position = normalizedSource.indexOf(normalizeText(item.sentence).toLocaleLowerCase());
+      const section = boundaries.filter((boundary) => boundary < position).length;
+      const current = bySection.get(section);
+      if (!current || item.score > current.score) bySection.set(section, item);
+    });
+    for (const item of [...bySection.values()].sort((a, b) => a.index - b.index)) {
+      if (selected.length >= targetCount) break;
+      if (!selected.includes(item)) selected.push(item);
+    }
+  }
+  if (selected.length < targetCount) {
+    const remaining = ranked.filter((item) => !selected.includes(item));
+    const slots = targetCount - selected.length;
+    for (let slot = 0; slot < slots; slot += 1) {
+      const start = Math.floor(slot * remaining.length / slots);
+      const end = Math.max(start + 1, Math.floor((slot + 1) * remaining.length / slots));
+      const best = remaining.slice(start, end).sort((a, b) => b.score - a.score || a.index - b.index)[0];
+      if (best) selected.push(best);
+    }
+  }
+  return selected.sort((a, b) => a.index - b.index).map((item) => item.sentence);
 }
 
 export function createLocalQuiz(text, { limit = 5, headings = [], language = '' } = {}) {
   const resolvedLanguage = detectLanguage(text, language);
   const terms = extractKeyTerms(text, { headings, limit: 14, language: resolvedLanguage });
-  const sentences = splitSentences(text, resolvedLanguage);
+  const sentences = splitSentences(text, resolvedLanguage).filter((sentence) => !isHeadingLike(sentence, headings)).filter(hasBalancedQuotes);
   const items = [];
+  const usedSentences = new Set();
   for (const term of terms) {
     if (items.length >= limit) break;
-    const sentence = sentences.find((candidate) => candidate.toLocaleLowerCase().includes(term.term.toLocaleLowerCase()));
+    const sentence = sentences.find((candidate) => !usedSentences.has(candidate) && candidate.toLocaleLowerCase().includes(term.term.toLocaleLowerCase()));
     if (!sentence) continue;
     const distractors = terms.filter((candidate) => candidate.key !== term.key).slice(items.length, items.length + 3);
     if (distractors.length < 2) continue;
     const escaped = term.term.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
     const stem = sentence.replace(new RegExp(escaped, 'iu'), '_____');
+    if (normalizeText(stem) === '_____' || normalizeText(stem).length < 18) continue;
     const options = [term, ...distractors].map((candidate) => ({
       text: candidate.term,
       correct: candidate.key === term.key,
@@ -248,6 +338,7 @@ export function createLocalQuiz(text, { limit = 5, headings = [], language = '' 
       options: [...options.slice(rotation), ...options.slice(0, rotation)],
       explanation: sentence,
     });
+    usedSentences.add(sentence);
   }
   return items;
 }
@@ -259,9 +350,9 @@ export function analyzeContent(text, { headings = [], language = '' } = {}) {
     text: normalized,
     language: resolvedLanguage,
     wordCount: tokenize(normalized, resolvedLanguage).length,
-    sentences: splitSentences(normalized, resolvedLanguage),
-    summary: summarizeText(normalized, { headings, language: resolvedLanguage }),
-    keyTerms: extractKeyTerms(normalized, { headings, language: resolvedLanguage }),
+    sentences: splitSentences(text, resolvedLanguage),
+    summary: summarizeText(text, { headings, language: resolvedLanguage }),
+    keyTerms: extractKeyTerms(text, { headings, language: resolvedLanguage }),
   };
 }
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { analyzeContent, createLocalQuiz, extractKeyTerms, summarizeText } from '../content-analysis.js';
+import { analyzeContent, createLocalQuiz, extractKeyTerms, isLikelyMetadataSentence, summarizeText } from '../content-analysis.js';
 
 const ARTICLE = `Compound interest grows money by earning returns on both the original balance and earlier returns.
 Compound interest becomes more powerful over long periods. Investors often use diversified index funds for long-term investing.
@@ -30,6 +30,34 @@ describe('extension content analysis', () => {
     expect(summary).toHaveLength(3);
     expect(summary.join(' ')).toMatch(/compound interest/i);
     expect(summary.every((sentence) => ARTICLE.includes(sentence))).toBe(true);
+  });
+
+  it('preserves paragraph boundaries and excludes standalone headings from summaries', () => {
+    const page = `Labor shortage outlook\n\nJuly 20, 2026 / CBS News\n\nEmployers may face a severe labor shortage over the next fifteen years.\n\nBaby boomer retirements will coincide with smaller groups of young workers entering the labor market.\n\nFewer available workers could improve wage growth and working conditions.`;
+    const summary = summarizeText(page, { headings: ['Labor shortage outlook'], limit: 8 });
+    expect(summary).not.toContain('Labor shortage outlook');
+    expect(summary[0]).not.toContain('Labor shortage outlook July');
+    expect(summary).toContain('Employers may face a severe labor shortage over the next fifteen years.');
+  });
+
+  it('removes news datelines and does not quiz the same sentence repeatedly', () => {
+    const news = `Labor shortage outlook\n\nJuly 20, 2026 / 10:36 AM EDT / CBS News\n\nA severe labor shortage could emerge as baby boomers retire.\n\nEmployers may raise wages when fewer qualified workers are available.\n\nArtificial intelligence may help firms maintain productivity with fewer workers.`;
+    expect(isLikelyMetadataSentence('July 20, 2026 / 10:36 AM EDT / CBS News')).toBe(true);
+    const analysis = analyzeContent(news, { headings: ['Labor shortage outlook'] });
+    const quiz = createLocalQuiz(news, { headings: ['Labor shortage outlook'], limit: 5 });
+    expect(analysis.summary.join(' ')).not.toMatch(/July 20|CBS News/);
+    expect(analysis.keyTerms.map((term) => term.term).join(' ')).not.toMatch(/CBS News/);
+    expect(new Set(quiz.map((item) => item.explanation)).size).toBe(quiz.length);
+    expect(quiz.map((item) => item.stem).join(' ')).not.toMatch(/July 20|CBS News/);
+  });
+
+  it('ranks substantive news concepts above vague words and publication metadata', () => {
+    const article = `Labor shortage outlook\n\nJuly 20, 2026 / 10:36 AM EDT / CBS News\n\nA severe labor shortage could emerge as baby boomers retire from the labor force.\n\nThe labor market will have fewer young workers entering available jobs.\n\nA smaller labor force could lead employers to offer higher wages and stronger wage growth.\n\nArtificial intelligence may help companies maintain productivity, while skilled trades remain essential.\n\nBaby boomer retirements and a shrinking workforce could increase demand for young workers.`;
+    const terms = extractKeyTerms(article, { headings: ['Labor shortage outlook'], limit: 12 }).map((term) => term.term.toLocaleLowerCase());
+    expect(terms.join(' ')).toMatch(/labor shortage|labor force|labor market|baby boomer|wage growth/);
+    expect(terms).not.toContain('people');
+    expect(terms).not.toContain('going');
+    expect(terms.join(' ')).not.toMatch(/cbs news/);
   });
 
   it('creates attempt-first quiz items from source concepts', () => {
