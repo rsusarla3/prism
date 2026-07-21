@@ -41,6 +41,7 @@ import {
   FUTURE_GOALS,
 } from 'prism-verifiers';
 import { generateLearningAsset, generateStudyBundle, createGeminiClient, createOpenAICompatibleClient, prepareGenerateRequest, attachMedia, createGeminiSpeechClient, type LLMClient } from 'prism-generation';
+import { buildEducationalFigurePrompt, createGeminiFigureClient, FIGURE_PROMPT_VERSION } from 'prism-generation';
 import type { LearningAssetKind } from 'prism-shared';
 import { prepareCapturedSources } from './capture.js';
 import { SourceStore } from './source-store.js';
@@ -127,6 +128,7 @@ const llmClient: LLMClient | null = compatibleBaseUrl && compatibleModel
   : geminiApiKey
     ? createGeminiClient({ apiKey: geminiApiKey, model: process.env.GEMINI_MODEL || undefined })
     : null;
+const figureClient = geminiApiKey ? createGeminiFigureClient({ apiKey: geminiApiKey, model: process.env.GEMINI_IMAGE_MODEL }) : null;
 
 const EXTENSION_LANGUAGES = new Set(['en', 'zh', 'hi', 'es', 'fr', 'ar', 'bn', 'pt', 'ru', 'ur']);
 
@@ -236,6 +238,28 @@ async function handleSourceAsset(sourceId: string, assetKind: string, body: unkn
   return sourceStore.saveLearningAsset(source, kind, result.payload);
 }
 
+async function handleSourceFigure(sourceId: string, body: unknown) {
+  const source = sourceStore.getSource(sourceId);
+  if (!source) throw Object.assign(new Error('Captured source not found.'), { status: 404 });
+  if (!figureClient) throw Object.assign(new Error('Gemini image generation is not configured.'), { status: 501 });
+  const input = body && typeof body === 'object' && !Array.isArray(body) ? body as Record<string, unknown> : {};
+  const homeLanguage = typeof input.homeLanguage === 'string' ? input.homeLanguage.trim().slice(0, 80) : '';
+  const promptVersion = `${FIGURE_PROMPT_VERSION}:${homeLanguage || 'source'}`;
+  if (input.regenerate !== true) {
+    const cached = sourceStore.getFigureAsset(sourceId, figureClient.model, promptVersion);
+    if (cached) return cached;
+  }
+  const prompt = buildEducationalFigurePrompt(source, homeLanguage || undefined);
+  const image = await figureClient.generate(prompt);
+  const altText = `AI-generated educational figure for “${source.title}”. ${source.text.slice(0, 240).replace(/\s+/gu, ' ').trim()}`;
+  return sourceStore.saveFigureAsset(source, {
+    ...image,
+    altText,
+    model: figureClient.model,
+    promptVersion,
+  });
+}
+
 interface LearnSession {
   session: ReturnType<typeof createSession>;
   concept: CurriculumConcept;
@@ -311,7 +335,7 @@ async function serveStatic(res: http.ServerResponse, urlPath: string) {
   }
 }
 
-type ExtensionDevFile = 'sidepanel.html' | 'sidepanel.js' | 'content-analysis.js' | 'capture-utils.js' | 'config.js' | 'privacy.js' | 'term-explanations.js' | 'speech-utils.js';
+type ExtensionDevFile = 'sidepanel.html' | 'sidepanel.js' | 'content-analysis.js' | 'concept-map.js' | 'capture-utils.js' | 'config.js' | 'privacy.js' | 'term-explanations.js' | 'speech-utils.js';
 
 async function serveExtensionDev(res: http.ServerResponse, filename: ExtensionDevFile) {
   const body = await readFile(path.join(EXTENSION_DIR, filename));
@@ -343,6 +367,9 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'GET' && url.pathname === '/extension-dev/content-analysis.js') {
       return serveExtensionDev(res, 'content-analysis.js');
+    }
+    if (req.method === 'GET' && url.pathname === '/extension-dev/concept-map.js') {
+      return serveExtensionDev(res, 'concept-map.js');
     }
     if (req.method === 'GET' && url.pathname === '/extension-dev/capture-utils.js') {
       return serveExtensionDev(res, 'capture-utils.js');
@@ -379,6 +406,10 @@ const server = http.createServer(async (req, res) => {
     const assetMatch = url.pathname.match(/^\/api\/sources\/([^/]+)\/assets\/(read|listen|watch|explore|quiz)$/);
     if (req.method === 'POST' && assetMatch) {
       return send(res, 200, await handleSourceAsset(decodeURIComponent(assetMatch[1]), assetMatch[2], await readBody<unknown>(req)));
+    }
+    const figureMatch = url.pathname.match(/^\/api\/sources\/([^/]+)\/figure$/);
+    if (req.method === 'POST' && figureMatch) {
+      return send(res, 200, await handleSourceFigure(decodeURIComponent(figureMatch[1]), await readBody<unknown>(req)));
     }
     if (req.method === 'POST' && url.pathname === '/api/core/growth') {
       return send(res, 200, handleCoreGrowth(await readBody<{ start: number; linearIncrement: number; exponentialMultiplier: number; years: number; guess?: 'linear' | 'exponential' }>(req)));

@@ -154,6 +154,15 @@ Captured sources and their generated learning assets are stored in
 is generated and cached separately: selecting one ray never requests the other
 assets.
 
+The extension's Visualize mode generates one cached educational figure from the
+captured Chrome tab using `gemini-2.5-flash-image` by default. The figure prompt
+uses a compact 3:4 portrait composition, large labels, and Prism's deep navy
+canvas for readability in a narrow side panel. The viewer automatically fits
+the full image and supports Fit/150%/200% zoom; bright legacy backgrounds are adapted to the dark
+theme automatically. If image generation is unavailable, a private local SVG
+evidence map remains available. Optional `GEMINI_IMAGE_MODEL` overrides the
+image model, and the API key never reaches the extension.
+
 For a credential-free local engine, run an OpenAI-compatible server such as
 Ollama and set `LLM_BASE_URL=http://127.0.0.1:11434/v1` plus `LLM_MODEL` to the
 installed model name. `LLM_API_KEY` is optional and is intended for compatible
