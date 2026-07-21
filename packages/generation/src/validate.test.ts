@@ -210,11 +210,11 @@ describe('validateStudyBundle', () => {
     expect(result.issues.some((i) => i.rule === 'listen-must-cover-segments')).toBe(true);
   });
 
-  it('rejects a bundle with no glossed terms', () => {
+  it('accepts a bundle with no glossed terms when the source needs none', () => {
     const bundle = clone(validBundle());
     bundle.read.segments[0].glosses = [];
     const result = validateStudyBundle(bundle);
-    expect(result.issues.some((i) => i.rule === 'gloss-required')).toBe(true);
+    expect(result.issues.some((i) => i.path.includes('gloss'))).toBe(false);
   });
 
   it('rejects a gloss definition that has grown into a paragraph', () => {

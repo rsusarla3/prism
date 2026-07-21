@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Prism — Point it at any page. Get it back in a form that sticks.</title>
+<meta name="description" content="Prism reads the page you're on and refracts it into a quiz, a story, a game, a simulation — whatever makes it click." />
+<style>
+  :root{
+    --bg:#07080f;
+    --ink:#eef1ff;
+    --muted:#8b93b8;
+    --dim:#5f678f;
+    --line:rgba(255,255,255,.09);
+
+    --red:#ff5f6d;
+    --orange:#ff9f45;
+    --yellow:#ffd93d;
+    --green:#3ddc97;
+    --blue:#4aa8ff;
+    --violet:#a06bff;
+  }
+
+  *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  body{
+    margin:0;
+    background:
+      radial-gradient(1200px 700px at 58% 46%, #141838 0%, transparent 64%),
+      radial-gradient(800px 500px at 6% 10%, #10142c 0%, transparent 62%),
+      var(--bg);
+    color:var(--ink);
+    font:16px/1.6 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Inter,Roboto,sans-serif;
+    -webkit-font-smoothing:antialiased;
+    overflow-x:hidden;
+  }
+  @media (prefers-reduced-motion:reduce){ html{scroll-behavior:auto;} }
+
+  /* ---------- top bar ---------- */
+  .topbar{
+    position:fixed; inset:0 0 auto 0; z-index:30;
+    display:flex; align-items:center; justify-content:space-between;
+    padding:20px 30px;
+    background:rgba(7,8,15,.86);
+    backdrop-filter:blur(12px);
+    border-bottom:1px solid transparent;
+  }
+  .wordmark{
+    display:flex; align-items:center; gap:10px;
+    font-size:19px; font-weight:650; letter-spacing:-.02em;
+    text-decoration:none; color:var(--ink);
+  }
+  .wordmark .glyph{
+    width:16px; height:14px;
+    clip-path:polygon(50% 0,100% 100%,0 100%);
+    background:linear-gradient(105deg,var(--red),var(--yellow),var(--green),var(--blue),var(--violet));
+  }
+  .topnav{display:flex; gap:6px; align-items:center;}
+  .topnav a{
+    color:var(--muted); text-decoration:none; font-size:14px;
+    padding:7px 13px; border-radius:8px; transition:color .18s, background .18s;
+  }
+  .topnav a:hover,.topnav a:focus-visible{color:var(--ink); background:rgba(255,255,255,.06); outline:none;}
+  .topnav .cta{color:var(--ink); border:1px solid rgba(255,255,255,.16); background:rgba(255,255,255,.04);}
+
+  /* ---------- stage ---------- */
+  .stage{position:relative; padding:96px 0 0;}
+  .scene-wrap{position:relative; width:100%;}
+  svg.scene{width:min(1460px,100%); height:auto; display:block; margin:0 auto; overflow:visible;}
+
+  /* the URL field is the light source */
+  .source{
+    position:absolute; z-index:5;
+    left:calc(50% - min(730px,50vw) + 8px);
+    top:50%; transform:translateY(-50%);
+    width:min(268px,20vw);
+  }
+  .source label{
+    display:block; font-size:11px; letter-spacing:.09em; text-transform:uppercase;
+    color:var(--dim); margin:0 0 8px 2px;
+  }
+  .source .field{
+    display:flex; align-items:center; gap:9px;
+    background:rgba(255,255,255,.05);
+    border:1px solid rgba(255,255,255,.16);
+    border-radius:11px; padding:11px 13px;
+    box-shadow:0 0 0 0 rgba(255,255,255,0), 0 0 34px -6px rgba(190,205,255,.30);
+    transition:border-color .2s, box-shadow .2s, background .2s;
+  }
+  .source .field:focus-within{
+    border-color:rgba(255,255,255,.42);
+    background:rgba(255,255,255,.08);
+    box-shadow:0 0 0 3px rgba(255,255,255,.06), 0 0 54px -4px rgba(210,222,255,.55);
+  }
+  .source .field .lock{width:6px;height:6px;border-radius:50%;background:#fff;opacity:.75;flex:none;}
+  .source input{
+    all:unset; flex:1; min-width:0;
+    font:14px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;
+    color:var(--ink);
+  }
+  .source input::placeholder{color:#6c7499;}
+  .source .note{margin:9px 0 0 2px; font-size:11.5px; color:var(--dim);}
+
+  /* ---------- beams ---------- */
+  .beam{fill:none; stroke-linecap:round; transition:stroke-width .22s cubic-bezier(.2,.7,.3,1);}
+  .beam-hit{fill:none; stroke:transparent; stroke-width:40; pointer-events:stroke;}
+
+  .ray{opacity:.85; cursor:pointer;}
+  .ray .beam{stroke-width:2.5;}
+  .ray .label{font-size:17px; font-weight:620; letter-spacing:-.015em; fill:var(--ink); opacity:.6; transition:opacity .22s;}
+  .ray .sub{font-size:12.5px; font-weight:450; fill:var(--muted); opacity:0; transition:opacity .22s;}
+  .ray:hover .beam,.ray:focus-visible .beam{stroke-width:7;}
+  .ray:hover .label,.ray:focus-visible .label{opacity:1;}
+  .ray:hover .sub,.ray:focus-visible .sub{opacity:.95;}
+  .ray:focus-visible{outline:none;}
+  .ray:focus-visible .label{text-decoration:underline; text-underline-offset:5px;}
+
+  .fan:hover .ray{opacity:.2;}
+  .fan .ray:hover{opacity:1;}
+  .fan:focus-within .ray{opacity:.2;}
+  .fan .ray:focus-within{opacity:1;}
+
+  .incoming-glow{stroke:url(#whiteBeam); stroke-width:13; fill:none; stroke-linecap:round; opacity:.22;}
+  .incoming{stroke:url(#whiteBeam); stroke-width:3.4; fill:none; stroke-linecap:round;}
+  /* dash + gap must be shorter than the path (~190u) or the spark is offscreen
+     for most of the cycle */
+  .spark{
+    fill:none; stroke:#fff; stroke-width:4; stroke-linecap:round;
+    stroke-dasharray:26 150; animation:travel 2.6s linear infinite; opacity:.95;
+  }
+  @keyframes travel{from{stroke-dashoffset:176;} to{stroke-dashoffset:0;}}
+
+  /* ---------- copy ---------- */
+  .lede{text-align:center; padding:14px 24px 46px; max-width:760px; margin:0 auto;}
+  .lede h1{margin:0 0 14px; font-size:clamp(27px,3.5vw,42px); letter-spacing:-.035em; font-weight:660; line-height:1.14;}
+  .lede p{margin:0 auto; color:var(--muted); max-width:560px; font-size:15.5px;}
+  .hint{margin-top:22px; font-size:12.5px; color:var(--dim); display:inline-flex; align-items:center; gap:8px;}
+  .hint .dot{width:5px;height:5px;border-radius:50%;background:var(--dim);animation:pulse 2.4s ease-in-out infinite;}
+  @keyframes pulse{0%,100%{opacity:.35;} 50%{opacity:1;}}
+  .m-only{display:none;}
+
+  /* ---------- touch fallback ---------- */
+  .mode-list{display:none;}
+  .mode-list a{
+    display:flex; align-items:center; gap:12px;
+    padding:13px 16px; border-radius:11px;
+    border:1px solid var(--line); background:rgba(255,255,255,.025);
+    text-decoration:none; color:var(--ink);
+  }
+  .mode-list a:active{background:rgba(255,255,255,.07);}
+  .mode-list .sw{width:4px; height:26px; border-radius:3px; flex:none;}
+  .mode-list .txt{display:flex; flex-direction:column; line-height:1.35;}
+  .mode-list .txt b{font-size:15px; font-weight:600;}
+  .mode-list .txt span{font-size:12.5px; color:var(--muted);}
+
+  /* ---------- sections ---------- */
+  .sections{max-width:1000px; margin:0 auto; padding:30px 24px 120px;}
+  .mode{
+    scroll-margin-top:112px;              /* clears the fixed topbar */
+    border-top:1px solid var(--line);
+    padding:38px 0 34px;
+    display:grid; grid-template-columns:190px 1fr; gap:34px; align-items:start;
+  }
+  .mode .tag{
+    display:inline-flex; align-items:center; gap:9px;
+    font-size:13px; font-weight:600; letter-spacing:.02em; text-transform:uppercase; color:var(--muted);
+  }
+  .mode .swatch{width:22px;height:3px;border-radius:2px;}
+  .mode h2{margin:0 0 8px; font-size:22px; letter-spacing:-.02em; font-weight:640;}
+  .mode p{margin:0 0 6px; color:var(--muted); max-width:62ch;}
+  .mode .egs{margin-top:10px; font-size:12.5px; color:var(--dim);}
+
+  footer{
+    border-top:1px solid var(--line); padding:26px 30px; color:var(--dim); font-size:13px;
+    display:flex; justify-content:space-between; flex-wrap:wrap; gap:12px;
+  }
+
+  /* ---------- responsive ---------- */
+  @media (max-width:900px){
+    .source{width:min(220px,24vw);}
+    .source .note{display:none;}
+  }
+  @media (max-width:760px){
+    .topnav a:not(.cta){display:none;}
+    .stage{padding-top:88px;}
+    .lede{padding:0 20px 26px;}
+    .mode{grid-template-columns:1fr; gap:12px;}
+
+    svg.scene{width:120%; margin-left:-10%;}
+    .ray .label,.ray .sub{display:none;}
+    .beam-hit{pointer-events:none;}
+    .fan .ray{opacity:.85 !important;}
+
+    .source{
+      position:static; transform:none; width:auto;
+      max-width:420px; margin:0 auto 6px; padding:0 20px;
+    }
+    .d-only{display:none;}
+    .m-only{display:inline;}
+    .mode-list{display:grid; gap:9px; max-width:420px; margin:0 auto; padding:20px 20px 8px;}
+  }
+
+  @media (prefers-reduced-motion:reduce){
+    .spark{animation:none; opacity:0;}
+    .hint .dot{animation:none;}
+    *{transition-duration:.01ms !important;}
+  }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <a class="wordmark" href="#top"><span class="glyph" aria-hidden="true"></span>Prism</a>
+  <nav class="topnav">
+    <a href="#quiz">Modes</a>
+    <a href="#how">How it works</a>
+    <a class="cta" href="#quiz">Add to Chrome</a>
+  </nav>
+</header>
+
+<main class="stage" id="top">
+  <div class="scene-wrap">
+
+    <div class="source">
+      <label for="url">The page you're on</label>
+      <div class="field">
+        <span class="lock" aria-hidden="true"></span>
+        <input id="url" type="text" value="wsj.com" spellcheck="false"
+               aria-label="The page Prism is reading" />
+      </div>
+      <p class="note">Any article, textbook page, or problem set.</p>
+    </div>
+
+    <svg class="scene" viewBox="0 0 1460 620" role="img"
+         aria-label="A webpage entering a glass prism as a beam of white light and refracting into six coloured rays — Quiz, Story, Game, Digest, Simulate and Coach.">
+      <defs>
+        <!-- userSpaceOnUse is required: the beam path is horizontal, so its
+             object bounding box has zero height and an objectBoundingBox
+             gradient degenerates and paints nothing. -->
+        <linearGradient id="whiteBeam" gradientUnits="userSpaceOnUse"
+                        x1="300" y1="310" x2="428" y2="310">
+          <stop offset="0"   stop-color="#fff" stop-opacity=".38"/>
+          <stop offset=".45" stop-color="#fff" stop-opacity=".78"/>
+          <stop offset="1"   stop-color="#fff" stop-opacity="1"/>
+        </linearGradient>
+        <linearGradient id="glassFront" x1="0" y1="0" x2=".8" y2="1">
+          <stop offset="0"   stop-color="#ffffff" stop-opacity=".22"/>
+          <stop offset=".55" stop-color="#ffffff" stop-opacity=".07"/>
+          <stop offset="1"   stop-color="#ffffff" stop-opacity=".15"/>
+        </linearGradient>
+        <linearGradient id="glassSide" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#ffffff" stop-opacity=".15"/>
+          <stop offset="1" stop-color="#ffffff" stop-opacity=".035"/>
+        </linearGradient>
+        <linearGradient id="glassBase" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0" stop-color="#ffffff" stop-opacity=".05"/>
+          <stop offset="1" stop-color="#ffffff" stop-opacity=".12"/>
+        </linearGradient>
+        <filter id="soft" x="-60%" y="-60%" width="220%" height="220%">
+          <feGaussianBlur stdDeviation="7" result="b"/>
+          <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+        <filter id="glow" x="-80%" y="-80%" width="260%" height="260%">
+          <feGaussianBlur stdDeviation="16"/>
+        </filter>
+      </defs>
+
+      <ellipse cx="520" cy="290" rx="250" ry="215" fill="#5b6bff" opacity=".08" filter="url(#glow)"/>
+
+      <!-- Incoming: the page, as light.
+           No filter here — a horizontal path has a zero-height bounding box, so
+           a bbox-relative filter region collapses to nothing. Glow is layered
+           strokes instead. -->
+      <g>
+        <path class="incoming-glow" d="M 300 310 L 428 310"/>
+        <path class="incoming"      d="M 300 310 L 428 310"/>
+        <path class="spark"         d="M 300 310 L 428 310"/>
+      </g>
+
+      <!-- ===== the prism (large) ===== -->
+      <path d="M 520 108 L 556 86 L 700 404 L 664 426 Z" fill="url(#glassSide)"/>
+      <path d="M 376 426 L 412 404 L 700 404 L 664 426 Z" fill="url(#glassBase)"/>
+      <path d="M 520 108 L 664 426 L 376 426 Z" fill="url(#glassFront)"
+            stroke="rgba(255,255,255,.44)" stroke-width="1.3" stroke-linejoin="round"/>
+      <path d="M 520 108 L 556 86"  stroke="rgba(255,255,255,.32)" stroke-width="1.1"/>
+      <path d="M 664 426 L 700 404" stroke="rgba(255,255,255,.22)" stroke-width="1.1"/>
+      <path d="M 376 426 L 412 404" stroke="rgba(255,255,255,.16)" stroke-width="1.1"/>
+      <path d="M 512 132 L 396 412" stroke="rgba(255,255,255,.55)" stroke-width="1.8"
+            stroke-linecap="round" opacity=".5"/>
+      <!-- internal refracted segment -->
+      <path d="M 428 310 L 620 330" stroke="rgba(255,255,255,.36)" stroke-width="1.9" fill="none"/>
+
+      <!-- ===== refracted fan ===== -->
+      <g class="fan">
+        <a class="ray" href="#quiz" tabindex="0" aria-label="Quiz — the page becomes questions you have to answer">
+          <path class="beam-hit" d="M 620 330 L 1140 152"/>
+          <path class="beam" stroke="var(--red)" d="M 620 330 L 1140 152" filter="url(#soft)"/>
+          <text class="label" x="1160" y="150">Quiz</text>
+          <text class="sub"   x="1160" y="170">You answer, you don't skim</text>
+        </a>
+
+        <a class="ray" href="#story" tabindex="0" aria-label="Story — the page retold as narrative">
+          <path class="beam-hit" d="M 620 330 L 1140 226"/>
+          <path class="beam" stroke="var(--orange)" d="M 620 330 L 1140 226" filter="url(#soft)"/>
+          <text class="label" x="1160" y="224">Story</text>
+          <text class="sub"   x="1160" y="244">Retold as something that happened</text>
+        </a>
+
+        <a class="ray" href="#game" tabindex="0" aria-label="Game — the concept becomes something you play">
+          <path class="beam-hit" d="M 620 330 L 1140 300"/>
+          <path class="beam" stroke="var(--yellow)" d="M 620 330 L 1140 300" filter="url(#soft)"/>
+          <text class="label" x="1160" y="298">Game</text>
+          <text class="sub"   x="1160" y="318">Play the idea, don't read it</text>
+        </a>
+
+        <a class="ray" href="#simulate" tabindex="0" aria-label="Simulate — the numbers on the page become movable">
+          <path class="beam-hit" d="M 620 330 L 1140 374"/>
+          <path class="beam" stroke="var(--green)" d="M 620 330 L 1140 374" filter="url(#soft)"/>
+          <text class="label" x="1160" y="372">Simulate</text>
+          <text class="sub"   x="1160" y="392">Move the numbers yourself</text>
+        </a>
+
+        <a class="ray" href="#digest" tabindex="0" aria-label="Digest — the page stripped to what matters">
+          <path class="beam-hit" d="M 620 330 L 1140 448"/>
+          <path class="beam" stroke="var(--blue)" d="M 620 330 L 1140 448" filter="url(#soft)"/>
+          <text class="label" x="1160" y="446">Digest</text>
+          <text class="sub"   x="1160" y="466">The 6% that actually matters</text>
+        </a>
+
+        <a class="ray" href="#coach" tabindex="0" aria-label="Coach — guided step by step through the problem">
+          <path class="beam-hit" d="M 620 330 L 1140 522"/>
+          <path class="beam" stroke="var(--violet)" d="M 620 330 L 1140 522" filter="url(#soft)"/>
+          <text class="label" x="1160" y="520">Coach</text>
+          <text class="sub"   x="1160" y="540">One hint at a time</text>
+        </a>
+      </g>
+    </svg>
+  </div>
+
+  <div class="lede">
+    <h1>Point it at any page.<br/>Get it back in a form that sticks.</h1>
+    <p>Prism reads the page you're already on and refracts it — into a quiz, a story, a game, a simulation. Same concept, whichever way finally makes it land.</p>
+    <div class="hint">
+      <span class="dot" aria-hidden="true"></span>
+      <span class="d-only">Hover a colour to follow it</span>
+      <span class="m-only">Pick a way in</span>
+    </div>
+  </div>
+
+  <nav class="mode-list" aria-label="Ways Prism transforms a page">
+    <a href="#quiz"><span class="sw" style="background:var(--red)"></span><span class="txt"><b>Quiz</b><span>You answer, you don't skim</span></span></a>
+    <a href="#story"><span class="sw" style="background:var(--orange)"></span><span class="txt"><b>Story</b><span>Retold as something that happened</span></span></a>
+    <a href="#game"><span class="sw" style="background:var(--yellow)"></span><span class="txt"><b>Game</b><span>Play the idea, don't read it</span></span></a>
+    <a href="#simulate"><span class="sw" style="background:var(--green)"></span><span class="txt"><b>Simulate</b><span>Move the numbers yourself</span></span></a>
+    <a href="#digest"><span class="sw" style="background:var(--blue)"></span><span class="txt"><b>Digest</b><span>The 6% that actually matters</span></span></a>
+    <a href="#coach"><span class="sw" style="background:var(--violet)"></span><span class="txt"><b>Coach</b><span>One hint at a time</span></span></a>
+  </nav>
+</main>
+
+<div class="sections">
+  <section class="mode" id="quiz">
+    <div class="tag"><span class="swatch" style="background:var(--red)"></span>Quiz</div>
+    <div>
+      <h2>The page starts asking you things</h2>
+      <p>Prism pulls the claims out of what you're reading and turns them into questions you have to answer before moving on. Passive skimming stops being an option — which is the whole point.</p>
+      <div class="egs">On a WSJ piece on rate cuts → “What happens to bond prices when rates fall, and why?”</div>
+    </div>
+  </section>
+
+  <section class="mode" id="story">
+    <div class="tag"><span class="swatch" style="background:var(--orange)"></span>Story</div>
+    <div>
+      <h2>Retold as something that happened to someone</h2>
+      <p>Abstract mechanisms become a sequence of events with stakes. Narrative is the format human memory is built for — the concept arrives attached to something that moves.</p>
+      <div class="egs">Inflation → a household's grocery bill across eighteen months.</div>
+    </div>
+  </section>
+
+  <section class="mode" id="game">
+    <div class="tag"><span class="swatch" style="background:var(--yellow)"></span>Game</div>
+    <div>
+      <h2>Play the idea instead of reading it</h2>
+      <p>The concept becomes something with a goal, a constraint, and immediate feedback on every move. Feedback lands on the action, not at the end of a session — no streak to protect, nothing to lose by stopping.</p>
+      <div class="egs">Diversification → allocate a portfolio, watch a sector crash, see what survived.</div>
+    </div>
+  </section>
+
+  <section class="mode" id="simulate">
+    <div class="tag"><span class="swatch" style="background:var(--green)"></span>Simulate</div>
+    <div>
+      <h2>Move the numbers yourself</h2>
+      <p>Any figure on the page becomes a control you can drag. Predict first, then move it — the gap between what you expected and what happened is where the concept actually lands.</p>
+      <div class="egs">“7% annual return” → what 1% of fees costs you across thirty years.</div>
+    </div>
+  </section>
+
+  <section class="mode" id="digest">
+    <div class="tag"><span class="swatch" style="background:var(--blue)"></span>Digest</div>
+    <div>
+      <h2>The part that actually matters</h2>
+      <p>A 3,000-word article carries maybe four load-bearing ideas. Prism finds them, shows what each one depends on, and gets out of the way.</p>
+      <div class="egs">Long explainer → four claims, the evidence for each, what's still contested.</div>
+    </div>
+  </section>
+
+  <section class="mode" id="coach">
+    <div class="tag"><span class="swatch" style="background:var(--violet)"></span>Coach</div>
+    <div>
+      <h2>Guided, one hint at a time</h2>
+      <p>For a problem rather than an article. Prism finds the first thing that went wrong instead of saying “incorrect,” and the final answer stays locked until you've genuinely tried — enforced server-side, not by hiding a button.</p>
+      <div class="egs">Highlight a problem → attempt → precise hint → solve → prove it on a new one.</div>
+    </div>
+  </section>
+
+  <section class="mode" id="how">
+    <div class="tag"><span class="swatch" style="background:linear-gradient(90deg,var(--red),var(--violet))"></span>How</div>
+    <div>
+      <h2>It reads the page you chose — and nothing else</h2>
+      <p>Prism only ever looks at a page when you ask it to, shows you exactly what it's about to read, and never runs in the background. Minimum Chrome permissions, no browsing history, no silent monitoring.</p>
+      <div class="egs">Financial, health, email and payment pages are excluded from automatic reading by default.</div>
+    </div>
+  </section>
+</div>
+
+<footer>
+  <span>Prism — a learning layer for the web</span>
+  <span>Educational only · Not financial advice</span>
+</footer>
+
+<script>
+  // The URL field is the light source: what you type is what enters the prism.
+  (function () {
+    var input = document.getElementById('url');
+    var svg = document.querySelector('svg.scene');
+    if (!input || !svg) return;
+    var label = svg.querySelector('title') || null;
+    input.addEventListener('input', function () {
+      var v = input.value.trim() || 'this page';
+      svg.setAttribute('aria-label',
+        v + ' entering a glass prism and refracting into six ways to learn it: Quiz, Story, Game, Simulate, Digest and Coach.');
+    });
+  })();
+</script>
+
+</body>
+</html>
