@@ -12,8 +12,20 @@ const RAYS=[
   {to:'future', label:'Model the path',  hint:'Time, fees, contributions',  y:369, c:'var(--ray-5)'},
   {to:'future', label:'Picture it',      hint:'Your horizon, drawn',        y:430, c:'var(--ray-6)'},
 ];
+const SITES=['wsj.com','khanacademy.org','investopedia.com','your textbook.pdf'];
 
 function Home({go}:{go:(v:View)=>void}){
+  const [site,setSite]=useState('wsj.com');
+  const [touched,setTouched]=useState(false);
+  // Cycle real examples until the user takes over the field.
+  useEffect(()=>{
+    if(touched) return;
+    if(matchMedia('(prefers-reduced-motion:reduce)').matches) return;
+    let i=0;
+    const t=setInterval(()=>{i=(i+1)%SITES.length;setSite(SITES[i])},2600);
+    return ()=>clearInterval(t);
+  },[touched]);
+
   return <section className="home page-enter">
     <div className="hero-copy">
       <p className="kicker">Adaptive learning, refracted</p>
@@ -26,13 +38,24 @@ function Home({go}:{go:(v:View)=>void}){
     </div>
 
     <div className="prism-art">
-      <svg className="prism-scene" viewBox="0 0 720 520" role="group"
-           aria-label="One idea entering a prism and refracting into six ways to learn it.">
+      {/* the page you're on IS the light entering the prism */}
+      <div className="px-source-field">
+        <label htmlFor="px-site">The page you&apos;re on</label>
+        <div className="px-field">
+          <span className="px-dot" aria-hidden="true"/>
+          <input id="px-site" value={site} spellCheck={false}
+                 onChange={e=>{setTouched(true);setSite(e.target.value)}}
+                 onFocus={()=>setTouched(true)}/>
+        </div>
+      </div>
+
+      <svg className="prism-scene" viewBox="0 0 820 520" role="group"
+           aria-label={site+' entering a prism and refracting into six ways to learn it.'}>
         <defs>
           {/* horizontal path => zero-height bbox, so userSpaceOnUse is required */}
-          <linearGradient id="pxBeam" gradientUnits="userSpaceOnUse" x1="70" y1="250" x2="229" y2="250">
-            <stop offset="0" stopColor="var(--ink)" stopOpacity=".18"/>
-            <stop offset="1" stopColor="var(--ink)" stopOpacity=".95"/>
+          <linearGradient id="pxBeam" gradientUnits="userSpaceOnUse" x1="250" y1="250" x2="349" y2="250">
+            <stop offset="0" stopColor="var(--ink)" stopOpacity=".30"/>
+            <stop offset="1" stopColor="var(--ink)" stopOpacity="1"/>
           </linearGradient>
           <linearGradient id="pxGlass" x1="0" y1="0" x2=".8" y2="1">
             <stop offset="0"   stopColor="var(--ink)" stopOpacity=".20"/>
@@ -45,24 +68,25 @@ function Home({go}:{go:(v:View)=>void}){
           </filter>
         </defs>
 
-        <text className="px-source" x="70" y="235">any page</text>
-        <path className="px-in-glow" d="M 70 250 L 229 250"/>
-        <path className="px-in"      d="M 70 250 L 229 250"/>
+        {/* incoming light. no filter: horizontal bbox has zero height */}
+        <path className="px-in-glow" d="M 250 250 L 349 250"/>
+        <path className="px-in"      d="M 250 250 L 349 250"/>
+        <path className="px-spark"   d="M 250 250 L 349 250"/>
 
         {/* 3D prism body */}
-        <path className="px-side" d="M 300 90 L 330 72 L 450 342 L 420 360 Z"/>
-        <path className="px-base" d="M 180 360 L 210 342 L 450 342 L 420 360 Z"/>
-        <path className="px-face" d="M 300 90 L 420 360 L 180 360 Z"/>
-        <path className="px-edge" d="M 294 108 L 196 348"/>
-        <path className="px-internal" d="M 229 250 L 379 268"/>
+        <path className="px-side" d="M 420 90 L 450 72 L 570 342 L 540 360 Z"/>
+        <path className="px-base" d="M 300 360 L 330 342 L 570 342 L 540 360 Z"/>
+        <path className="px-face" d="M 420 90 L 540 360 L 300 360 Z"/>
+        <path className="px-edge" d="M 414 108 L 316 348"/>
+        <path className="px-internal" d="M 349 250 L 499 268"/>
 
         <g className="px-fan">
           {RAYS.map(r=>
             <a className="px-ray" key={r.label} href={'#'+r.to} aria-label={r.label+' — '+r.hint}>
-              <path className="px-hit"  d={`M 379 268 L 555 ${r.y}`}/>
-              <path className="px-beam" style={{stroke:r.c}} filter="url(#pxSoft)" d={`M 379 268 L 555 ${r.y}`}/>
-              <text className="px-label" x="570" y={r.y+4}>{r.label}</text>
-              <text className="px-hint"  x="570" y={r.y+21}>{r.hint}</text>
+              <path className="px-hit"  d={`M 499 268 L 660 ${r.y}`}/>
+              <path className="px-beam" style={{stroke:r.c}} filter="url(#pxSoft)" d={`M 499 268 L 660 ${r.y}`}/>
+              <text className="px-label" x="676" y={r.y+4}>{r.label}</text>
+              <text className="px-hint"  x="676" y={r.y+21}>{r.hint}</text>
             </a>
           )}
         </g>
