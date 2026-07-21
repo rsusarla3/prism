@@ -136,8 +136,10 @@ function renderHome() {
     ${prismSvg()}
     <p class="eyebrow">Ways back out</p>
     ${waysBlock()}
+    <button class="back" id="open-library">Open source library ↗</button>
     <p class="note">Prism reads this page only when you pick a way, and never any other tab.</p>`;
   bindWays();
+  document.querySelector('#open-library')?.addEventListener('click', () => open('#library'));
 }
 
 function bindWays() {
@@ -191,7 +193,7 @@ async function generateAsset(kind, label) {
 async function captureSource() {
   const stored = await chrome.storage.session.get(['selection', 'pendingContext']);
   const selected = stored.selection || stored.pendingContext;
-  if (selected?.text && selected.pageUrl) {
+  if (selected?.text && selected.pageUrl && selected.pageUrl === page?.url) {
     return {
       url: selected.pageUrl,
       title: selected.pageTitle || page?.title || 'Selected page text',
