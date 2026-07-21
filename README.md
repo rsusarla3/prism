@@ -2,81 +2,108 @@
 
 **One concept. As many ways as it takes to make it click.**
 
-Prism is an adaptive Chrome learning copilot that understands the material a
-learner selects, asks what they are trying to accomplish, teaches the concept
-through interactive methods that change when the learner gets stuck, and only
-reveals a homework answer *after* the learner makes a meaningful attempt.
+Prism is an adaptive learning copilot with two focused experiences:
 
-Spec: [`docs/prism/PRISM_HACKATHON_BUILD_SPEC.md`](docs/prism/PRISM_HACKATHON_BUILD_SPEC.md)
-Agent rules: [`docs/prism/AGENTS.md`](docs/prism/AGENTS.md)
+- **Prism Core** teaches linear versus exponential growth through prediction, synchronized graphs and tables, diagnostics, transparent mode recommendations, and a transfer challenge.
+- **Prism Future** connects investing concepts to 3–5 user-selected life goals through deterministic projections, time and fee comparisons, asset tradeoffs, and an aspirational Future Snapshot prompt.
 
-## Monorepo layout
+The hackathon build is educational software, not an answer bot, brokerage calculator, or personalized investment adviser.
 
+## Architecture
+
+```text
+Chrome side panel ── selected-text preview + goal choice
+        │
+        ▼
+Web experience ─── Prism Core / Prism Future
+        │
+        ├── shared contracts and provider boundaries
+        ├── approved curriculum and orchestration rules
+        └── deterministic math/finance verifiers
 ```
-packages/shared        Canonical TypeScript domain types & API contracts (authoritative)
-packages/verifiers     Deterministic math + compound-interest logic (+ tests)
-packages/curriculum    Approved curriculum objects (linear eq, compound interest, ETF)
-packages/learning-engine  Session state machine, hint ladder, mode recommendation (+ tests)
-packages/api-client    Typed HTTP client
-apps/web               Zero-dep Node server + demo UI (server-side answer gating)
-apps/extension         MV3 Chrome extension (side panel + context menu + content script)
-```
 
-## Prerequisites
+| Location | Responsibility |
+|---|---|
+| `apps/web` | Responsive learning UI and server routes |
+| `apps/extension` | Minimal-permission MV3 side panel and selection capture |
+| `packages/shared` | Authoritative contracts and provider interfaces |
+| `packages/verifiers` | Deterministic growth, investing, and algebra logic |
+| `packages/learning-engine` | Answer gate, hints, adaptations, and quizzes |
+| `packages/curriculum` | Approved concept objects |
+| `packages/api-client` | Typed client boundary |
 
-- Node.js 22+ (uses built-in `fetch`, `crypto.randomUUID`, ESM)
-- npm 10+
+## Run locally
 
-## Develop
+Requirements: Node.js 22+ and npm 10+.
 
 ```bash
 npm install
-npm run build      # compile all packages
-npm test           # run verifier + learning-engine test suites (vitest)
+npm run build
+npm run dev
 ```
 
-### Run the web app (demo UI on localhost)
+Open [http://localhost:8787](http://localhost:8787). The server binds to `0.0.0.0` by default for same-hotspot demos; set `HOST=127.0.0.1` to keep it local.
+
+For UI development with hot reload, keep the API server running and start Vite in another terminal:
 
 ```bash
-npm run build -w prism-web
-npm run dev              # binds 0.0.0.0 and prints your LAN URL
-# open http://localhost:8787
+npm run dev
+npm run dev:ui -w prism-web
 ```
 
-`npm run dev` exposes the server on your network too. For **car / LAN use with
-the team**, share the `on your network` URL it prints — see
-[`docs/prism/LAN_SETUP.md`](docs/prism/LAN_SETUP.md). Teammates run the
-extension locally and point its **Backend host** field at the host laptop's
-hotspot IP; the browser UI just needs the host URL.
+The production build compiles the React UI into `apps/web/public`, where the dependency-free Node server serves it.
 
-The demo page exercises both P0 flows:
-- **School** — paste an equation, pick a goal, submit attempts. The final
-  answer + solution steps are **gated server-side** and only returned after a
-  meaningful attempt (try the API directly to confirm).
-- **Life** — compound-growth simulator with a fee-drag readout.
+## Load the Chrome extension
 
-### Load the Chrome extension
+1. Open `chrome://extensions`.
+2. Enable **Developer mode**.
+3. Select **Load unpacked** and choose `apps/extension`.
+4. Highlight ordinary webpage text and choose **Learn this with Prism** from the context menu.
+5. Confirm the selection and choose a learning goal in the side panel.
 
-1. Build the web app and start it (`http://localhost:8787`).
-2. Chrome → `chrome://extensions` → enable **Developer mode**.
-3. **Load unpacked** → select `apps/extension/`.
-4. Highlight text on any page → right-click **Learn with Prism** (or click the
-   toolbar icon). The side panel opens with the shared content.
+The extension requests only `sidePanel`, `storage`, `contextMenus`, and temporary `activeTab` access. It does not request browsing history or broad host access, monitor pages, or read other tabs.
 
-## Key design decisions
+## Quality commands
 
-- **Server-side answer gating** (AGENTS.md rule 4). The answer is never sent to
-  the client until the session records a meaningful attempt. See
-  `apps/web/src/server.ts` `handleReveal`.
-- **Deterministic verifiers.** Math/finance checks are pure functions with tests
-  (`packages/verifiers`); the LLM never performs arithmetic.
-- **Narrowest Chrome permissions.** The extension only acts on explicit user
-  selection; it never reads history or background-monitors pages.
-- **Provider-neutral finance.** A disabled `FinancialDataProvider` interface is
-  reserved for a future bank connection; V1 finance uses manual inputs only.
+```bash
+npm run lint       # TypeScript static checks
+npm run typecheck
+npm test
+npm run build
+```
 
-## Status
+## Demo path
 
-P0 scaffold complete: shared types, verifiers (tested), curriculum, learning
-engine (tested), web server with enforced gating, and an MV3 extension skeleton.
-P1/P2 items (uploads, accounts, streaming, audio) are not yet built.
+### Prism Core
+
+1. Predict which growth model wins.
+2. Explore the synchronized graph, controls, and value table.
+3. Miss the diagnostic twice to trigger an explained table-mode recommendation.
+4. Complete the new-context transfer challenge.
+
+### Prism Future
+
+1. Choose 3–5 future goals or add a custom goal.
+2. Adjust manual contribution, horizon, return, and fee assumptions.
+3. Compare starting five years later and paying a higher fee.
+4. Review ETFs, individual stocks, and bonds.
+5. Use the local Future Snapshot illustration or opt into image generation with a user-provided key.
+
+## Privacy and safety
+
+- Selected page content is treated as untrusted and shown before use.
+- Original homework answers remain server-gated until a meaningful attempt.
+- Financial data is manual and remains in memory for this demo.
+- No bank credentials, provider tokens, or model secrets are shipped to the extension.
+- Projections are illustrative, inflation-aware scenarios—not guarantees.
+- Future Snapshot image generation is opt-in and browser-to-provider. A user-provided OpenAI API key is stored only in that browser's `localStorage`, never sent to Prism's server, logged, or committed. Without a key, Prism shows a local illustration.
+
+## Known limitations
+
+- In-memory sessions and plans reset with the server.
+- The extension hands the confirmed goal to the web experience but the full session UI runs in the web app.
+- Volatility, taxes, employer matches, and individualized suitability are intentionally excluded.
+- The algebra verifier supports a constrained linear-expression grammar.
+- Browser-side image generation depends on provider CORS, account access, billing, rate limits, and content policy; the local illustration remains available when it fails.
+
+See [PRISM_HACKATHON_BUILD_SPEC.md](PRISM_HACKATHON_BUILD_SPEC.md), [AGENTS.md](AGENTS.md), and [CODEX_HANDOFF.md](CODEX_HANDOFF.md) for implementation details and next steps.
