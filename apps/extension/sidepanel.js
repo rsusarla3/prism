@@ -764,7 +764,7 @@ async function showListen() {
     <div class="listen-controls"><label>Read<select id="listen-scope"><option value="summary">Summary</option><option value="article">Full page</option><option value="narration">Narration</option></select></label>
       <label>Speed<select id="listen-rate"><option value="0.75">0.75×</option><option value="1" selected>1×</option><option value="1.25">1.25×</option><option value="1.5">1.5×</option><option value="2">2×</option></select></label>
       <label>Voice<select id="listen-voice"></select></label></div>
-    <div class="transport"><button class="fig" id="listen-play">▶ Play</button><button class="fig" id="listen-pause">Ⅱ Pause</button><button class="fig" id="listen-stop">■ Stop</button></div>
+    <div class="transport"><button class="fig" id="listen-play">▶ Play</button><button class="fig" id="listen-pause">Ⅱ Pause</button><button class="fig" id="listen-stop">■ Stop</button><button class="fig" id="listen-gemini">✦ Gemini voice</button></div>
     <p class="voice-status" id="voice-status">Ready.</p>`, listenCopy.note || 'Playback stays on your device.');
   bindSpeech({ summary: listenCopy.values[0], article: listenCopy.values[1], narration: listenCopy.values[2] });
 }
@@ -797,10 +797,39 @@ function bindSpeech(copy) {
     speechSynthesis.speak(utterance);
   };
   document.querySelector('#listen-pause').onclick = () => {
+    if (!geminiAudio.paused) { geminiAudio.pause(); document.querySelector('#voice-status').textContent = 'Paused.'; return; }
+    if (geminiAudio.src && geminiAudio.currentTime > 0 && geminiAudio.currentTime < geminiAudio.duration) { geminiAudio.play(); return; }
     if (speechSynthesis.paused) { speechSynthesis.resume(); document.querySelector('#voice-status').textContent = 'Playing…'; }
     else { speechSynthesis.pause(); document.querySelector('#voice-status').textContent = 'Paused.'; }
   };
-  document.querySelector('#listen-stop').onclick = () => { speechSynthesis.cancel(); document.querySelector('#voice-status').textContent = 'Stopped.'; };
+  document.querySelector('#listen-stop').onclick = () => { speechSynthesis.cancel(); geminiAudio.pause(); document.querySelector('#voice-status').textContent = 'Stopped.'; };
+
+  // Server-generated narration via Gemini TTS. Additive: browser speech above
+  // stays the default and the fallback. Plays the returned data URL directly,
+  // so no audio bytes are stored anywhere.
+  const geminiAudio = new Audio();
+  geminiAudio.onended = () => { document.querySelector('#voice-status').textContent = 'Finished.'; };
+  geminiAudio.onplay = () => { document.querySelector('#voice-status').textContent = 'Playing (Gemini voice)…'; };
+  const status = document.querySelector('#voice-status');
+  document.querySelector('#listen-gemini').onclick = async (event) => {
+    const button = event.currentTarget;
+    speechSynthesis.cancel();
+    const scope = document.querySelector('#listen-scope').value;
+    button.disabled = true;
+    status.textContent = 'Generating Gemini narration…';
+    try {
+      const { audio } = await post('/api/tts', { text: copy[scope], language: targetLanguage });
+      geminiAudio.src = audio.dataUrl;
+      geminiAudio.playbackRate = Number(document.querySelector('#listen-rate').value);
+      await geminiAudio.play();
+    } catch (error) {
+      status.textContent = error.message?.includes('501')
+        ? 'No server voice configured — use the browser voice above.'
+        : `Gemini voice failed: ${error.message}`;
+    } finally {
+      button.disabled = false;
+    }
+  };
 }
 
 function devShim() {

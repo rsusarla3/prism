@@ -177,6 +177,19 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+// Plain text -> spoken audio, for the extension's Listen ray. Same speech
+// provider as /api/generate/media, but takes a script string instead of a whole
+// bundle. The client falls back to on-device browser speech when this 501s.
+const TTS_MAX_CHARS = 5_000;
+async function handleTts(body: unknown) {
+  if (!speechClient) throw Object.assign(new Error('No speech provider configured.'), { status: 501 });
+  const text = isRecord(body) && typeof body.text === 'string' ? body.text.trim() : '';
+  if (!text) throw Object.assign(new Error('text is required.'), { status: 400 });
+  if (text.length > TTS_MAX_CHARS) throw Object.assign(new Error(`text must not exceed ${TTS_MAX_CHARS} characters.`), { status: 413 });
+  const language = isRecord(body) && typeof body.language === 'string' ? body.language : 'en';
+  return { audio: await speechClient.speak({ text, language }) };
+}
+
 async function handleGenerate(body: unknown) {
   const request = prepareGenerateRequest(body);
   if (!llmClient) {
@@ -381,6 +394,9 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'POST' && url.pathname === '/api/generate/media') {
       return send(res, 200, await handleMedia(await readBody<unknown>(req)));
+    }
+    if (req.method === 'POST' && url.pathname === '/api/tts') {
+      return send(res, 200, await handleTts(await readBody<unknown>(req)));
     }
     if (req.method === 'POST' && url.pathname === '/api/translate') {
       return send(res, 200, await handleTranslate(await readBody<unknown>(req, 1_200_000)));
