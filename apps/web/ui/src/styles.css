@@ -3,3 +3,33 @@
 @media(max-width:850px){.home{grid-template-columns:1fr}.prism-art{height:340px}.trust{display:none}.lesson-head{grid-template-columns:1fr}.explore-grid,.future-model,.snapshot-stage{grid-template-columns:1fr}.control-card{position:static}.future-model .control-card{order:2}.asset-grid{grid-template-columns:1fr}.snapshot-visual{min-height:390px}.goal-categories{grid-template-columns:1fr}}
 @media(max-width:480px){.topbar{height:60px}.topbar nav{display:none}footer{display:block}.home{padding-top:42px}.hero-copy h1{font-size:48px}.prism-art{height:260px}.prism-shape{font-size:125px}.lesson{padding:25px 12px 60px}.lesson-head{gap:16px;margin-bottom:22px}.lesson-head h1{font-size:36px}.stepper{width:100%;justify-content:space-between}.stepper li b{display:none}.question-card,.goal-stage,.asset-stage,.chart-card,.control-card{border-radius:19px;padding:18px}.choice-grid,.goal-categories,.metric-grid{grid-template-columns:1fr}.goal-heading{align-items:center}.snapshot-stage{border-radius:19px}.snapshot-visual{min-height:320px}.snapshot-copy{padding:22px}.snapshot-actions{display:grid}.home-actions{display:grid}.chart{min-width:580px}.chart-shell{overflow-x:auto}.goal-cloud{flex-wrap:wrap}}
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}.chart-series polyline{stroke-dashoffset:0}}
+
+/* ---- hero prism (interactive) ---- */
+:root{--ray-1:#d8455a;--ray-2:#c96a12;--ray-3:#9a7b00;--ray-4:#12805e;--ray-5:#1d6fd0;--ray-6:#6b4fd8}
+html[data-theme=dark]{--ray-1:#ff5f6d;--ray-2:#ff9f45;--ray-3:#ffd93d;--ray-4:#3ddc97;--ray-5:#4aa8ff;--ray-6:#a06bff}
+.prism-scene{width:100%;height:100%;overflow:visible}
+.px-source{font:600 11px 'DM Sans';letter-spacing:.12em;text-transform:uppercase;fill:var(--muted)}
+.px-in-glow{stroke:url(#pxBeam);stroke-width:11;fill:none;stroke-linecap:round;opacity:.18}
+.px-in{stroke:url(#pxBeam);stroke-width:2.6;fill:none;stroke-linecap:round}
+.px-side{fill:var(--ink);opacity:.10}
+.px-base{fill:var(--ink);opacity:.05}
+.px-face{fill:url(#pxGlass);stroke:var(--ink);stroke-opacity:.34;stroke-width:1.1;stroke-linejoin:round}
+.px-edge{stroke:var(--ink);stroke-opacity:.34;stroke-width:1.4;stroke-linecap:round;fill:none}
+.px-internal{stroke:var(--ink);stroke-opacity:.28;stroke-width:1.5;fill:none}
+/* transparent strokes are not reliably hit-tested; force it */
+.px-hit{fill:none;stroke:transparent;stroke-width:34;pointer-events:stroke}
+.px-ray{cursor:pointer}
+.px-ray:focus-visible{outline:none}
+.px-beam{fill:none;stroke-width:2.4;stroke-linecap:round;transition:stroke-width .2s cubic-bezier(.2,.7,.3,1)}
+.px-label{font:600 13.5px 'DM Sans';fill:var(--ink);opacity:.62;transition:opacity .2s}
+.px-hint{font:500 10.5px 'DM Sans';fill:var(--muted);opacity:0;transition:opacity .2s}
+.px-ray:hover .px-beam,.px-ray:focus-visible .px-beam{stroke-width:6.5}
+.px-ray:hover .px-label,.px-ray:focus-visible .px-label{opacity:1}
+.px-ray:hover .px-hint,.px-ray:focus-visible .px-hint{opacity:.95}
+.px-ray:focus-visible .px-label{text-decoration:underline;text-underline-offset:4px}
+.px-fan:hover .px-ray{opacity:.24}
+.px-fan .px-ray:hover{opacity:1}
+.px-fan:focus-within .px-ray{opacity:.24}
+.px-fan .px-ray:focus-within{opacity:1}
+@media(max-width:850px){.px-hint{display:none}.px-label{opacity:.9}.px-fan:hover .px-ray{opacity:1}}
+@media(prefers-reduced-motion:reduce){.px-beam,.px-label,.px-hint{transition:none}}
