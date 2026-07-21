@@ -275,7 +275,7 @@ async function serveStatic(res: http.ServerResponse, urlPath: string) {
   }
 }
 
-type ExtensionDevFile = 'sidepanel.html' | 'sidepanel.js' | 'content-analysis.js' | 'config.js' | 'privacy.js';
+type ExtensionDevFile = 'sidepanel.html' | 'sidepanel.js' | 'content-analysis.js' | 'capture-utils.js' | 'config.js' | 'privacy.js';
 
 async function serveExtensionDev(res: http.ServerResponse, filename: ExtensionDevFile) {
   const body = await readFile(path.join(EXTENSION_DIR, filename));
@@ -307,6 +307,9 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'GET' && url.pathname === '/extension-dev/content-analysis.js') {
       return serveExtensionDev(res, 'content-analysis.js');
+    }
+    if (req.method === 'GET' && url.pathname === '/extension-dev/capture-utils.js') {
+      return serveExtensionDev(res, 'capture-utils.js');
     }
     if (req.method === 'GET' && url.pathname === '/extension-dev/config.js') {
       return serveExtensionDev(res, 'config.js');
