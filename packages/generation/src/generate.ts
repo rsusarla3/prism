@@ -7,10 +7,12 @@
 import type { GenerateRequest, StudyBundle } from 'prism-shared';
 import { buildGenerationPrompt } from './prompt.js';
 import { validateStudyBundle, type ValidationIssue } from './validate.js';
+import { prepareGenerateRequest } from './request.js';
+import { STUDY_BUNDLE_JSON_SCHEMA } from './schema.js';
 
 /** Minimal seam for whichever LLM provider ends up wired in. No provider is chosen yet. */
 export interface LLMClient {
-  complete(args: { system: string; user: string }): Promise<string>;
+  complete(args: { system: string; user: string; schema?: Record<string, unknown> }): Promise<string>;
 }
 
 export interface GenerateResult {
@@ -33,13 +35,14 @@ export async function generateStudyBundle(
   opts: { maxAttempts?: number } = {},
 ): Promise<GenerateResult> {
   const maxAttempts = opts.maxAttempts ?? DEFAULT_MAX_ATTEMPTS;
-  const { system, user } = buildGenerationPrompt(request);
+  const prepared = prepareGenerateRequest(request);
+  const { system, user } = buildGenerationPrompt(prepared);
 
   let currentUser = user;
   let lastIssues: ValidationIssue[] = [];
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    const raw = await llm.complete({ system, user: currentUser });
+    const raw = await llm.complete({ system, user: currentUser, schema: STUDY_BUNDLE_JSON_SCHEMA });
     const bundle = parseBundle(raw);
     if (!bundle) {
       lastIssues = [{ path: '', rule: 'invalid-json', message: 'Model output was not valid JSON.' }];
@@ -47,9 +50,9 @@ export async function generateStudyBundle(
       continue;
     }
 
-    const result = validateStudyBundle(bundle);
+    const result = validateStudyBundle(bundle, prepared.text);
     if (result.valid) {
-      return { bundle, issues: [], attempts: attempt };
+      return { bundle: bundle as StudyBundle, issues: [], attempts: attempt };
     }
 
     lastIssues = result.issues;
@@ -59,9 +62,9 @@ export async function generateStudyBundle(
   return { bundle: null, issues: lastIssues, attempts: maxAttempts };
 }
 
-function parseBundle(raw: string): StudyBundle | null {
+function parseBundle(raw: string): unknown | null {
   try {
-    return JSON.parse(raw) as StudyBundle;
+    return JSON.parse(raw) as unknown;
   } catch {
     return null;
   }
