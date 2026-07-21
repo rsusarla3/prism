@@ -4,6 +4,7 @@
   "version": "0.1.0",
   "description": "Adaptive learning copilot: Prism Core (growth) and Prism Future (investing).",
   "permissions": ["sidePanel", "storage", "contextMenus", "activeTab"],
+  "host_permissions": ["http://localhost:8787/*"],
   "background": { "service_worker": "background.js", "type": "module" },
   "side_panel": { "default_path": "sidepanel.html" },
   "action": { "default_title": "Open Prism" },
