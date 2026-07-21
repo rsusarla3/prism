@@ -83,16 +83,78 @@ export function checkContractValues(bundle: StudyBundle): ValidationIssue[] {
   return issues;
 }
 
+/**
+ * Numbers plotted in explore.data are DATA — they are read as quantities, so an
+ * invented one is a factual error. Scoped deliberately to that block only.
+ *
+ * Scanning prose instead (recaps, quiz options, captions) produced false
+ * failures on correct bundles: quiz distractors must contain numbers absent
+ * from the source (that is what makes them distractors), and recaps legitimately
+ * re-express "82,500" as "82.5 thousand". The arithmetic guarantee the spec
+ * actually promises is enforced by packages/verifiers, not by string matching.
+ */
 export function checkNumberProvenance(bundle: StudyBundle, sourceText: string): ValidationIssue[] {
+  if (!sourceText.trim()) return [];
   const sourceNumbers = new Set(extractNumbers(sourceText));
   const issues: ValidationIssue[] = [];
-  for (const [path, value] of learnerVisibleValues(bundle)) {
-    for (const number of extractNumbers(String(value))) {
+  bundle.explore.data?.series.forEach((series, i) => series.points.forEach((point, j) => {
+    for (const number of extractNumbers(String(point.y))) {
       if (!sourceNumbers.has(number)) {
-        issues.push(issue(path, 'number-source-required', `Number ${number} does not appear in the source text.`));
+        issues.push(issue(`explore.data.series[${i}].points[${j}].y`, 'number-source-required', `Number ${number} does not appear in the source text.`));
       }
     }
-  }
+  }));
+  return issues;
+}
+
+/**
+ * Runaway gloss ceiling. The prompt asks for <= 12 words because a gloss has to
+ * be readable without losing your place in the sentence; this cap sits higher on
+ * purpose. A 13-word gloss is still usable, and failing it would burn a full
+ * retry (~1 min of model time) to fix a cosmetic overrun. This catches the real
+ * failure — a gloss that has become a paragraph.
+ */
+export const MAX_GLOSS_WORDS = 20;
+
+/**
+ * README's asset diagram promises "Explore: timeline, data", and step-level
+ * interaction is the strongest interaction effect in RESEARCH_BASIS (d = 0.76).
+ * An entirely empty explore block silently drops that pillar, so require at
+ * least one of the two.
+ */
+export function checkExploreNotEmpty(bundle: StudyBundle): ValidationIssue[] {
+  const hasTimeline = (bundle.explore.timeline?.length ?? 0) > 0;
+  const hasData = (bundle.explore.data?.series.length ?? 0) > 0;
+  return hasTimeline || hasData
+    ? []
+    : [issue('explore', 'explore-requires-timeline-or-data', 'explore must contain a non-empty timeline or data block.')];
+}
+
+/**
+ * Karaoke sync is how the modality principle (g = 0.82) is actually delivered:
+ * narration has to line up with the text on screen. An empty or partial
+ * segmentIndex leaves segments with no audio pointing at them.
+ */
+export function checkNarrationCoversSegments(bundle: StudyBundle): ValidationIssue[] {
+  if (bundle.read.segments.length === 0) return [];
+  const covered = new Set(bundle.listen.segmentIndex);
+  const missing = bundle.read.segments.map((_, i) => i).filter((i) => !covered.has(i));
+  return missing.length === 0
+    ? []
+    : [issue('listen.segmentIndex', 'listen-must-cover-segments', `Narration must reference every read segment; segment(s) ${missing.join(', ')} are uncovered.`)];
+}
+
+/** Glossing carries a measured vocabulary benefit, so a bundle with none wastes the Read stage. */
+export function checkGlosses(bundle: StudyBundle): ValidationIssue[] {
+  const issues: ValidationIssue[] = [];
+  const total = bundle.read.segments.reduce((sum, segment) => sum + segment.glosses.length, 0);
+  if (total === 0) issues.push(issue('read.segments', 'gloss-required', 'At least one term must be glossed.'));
+  bundle.read.segments.forEach((segment, i) => segment.glosses.forEach((gloss, j) => {
+    const words = gloss.definition.trim().split(/\s+/).filter(Boolean).length;
+    if (words > MAX_GLOSS_WORDS) {
+      issues.push(issue(`read.segments[${i}].glosses[${j}].definition`, 'gloss-definition-too-long', `Gloss definitions must be ${MAX_GLOSS_WORDS} words or fewer (found ${words}).`));
+    }
+  }));
   return issues;
 }
 
@@ -104,6 +166,9 @@ const CHECKS: Check[] = [
   checkStructuralSanity,
   checkExploreDataFinite,
   checkContractValues,
+  checkExploreNotEmpty,
+  checkNarrationCoversSegments,
+  checkGlosses,
 ];
 
 export function validateStudyBundle(value: unknown, sourceText = ''): ValidationResult {
@@ -195,24 +260,13 @@ function checkExploreStructure(explore: Record<string, unknown>, issues: Validat
   }
 }
 
-function learnerVisibleValues(bundle: StudyBundle): Array<[string, string | number]> {
-  const values: Array<[string, string | number]> = [['meta.title', bundle.meta.title], ['listen.script', bundle.listen.script], ['watch.altText', bundle.watch.altText]];
-  bundle.read.segments.forEach((segment, i) => {
-    values.push([`read.segments[${i}].text`, segment.text], [`read.segments[${i}].recap`, segment.recap]);
-    segment.glosses.forEach((gloss, j) => values.push([`read.segments[${i}].glosses[${j}].definition`, gloss.definition]));
-  });
-  bundle.watch.steps.forEach((step, i) => values.push([`watch.steps[${i}].caption`, step.caption], [`watch.steps[${i}].description`, step.description]));
-  bundle.explore.timeline?.forEach((entry, i) => values.push([`explore.timeline[${i}].label`, entry.label], [`explore.timeline[${i}].detail`, entry.detail]));
-  bundle.explore.data?.series.forEach((series, i) => series.points.forEach((point, j) => values.push([`explore.data.series[${i}].points[${j}].x`, point.x], [`explore.data.series[${i}].points[${j}].y`, point.y])));
-  bundle.quiz.items.forEach((item, i) => {
-    values.push([`quiz.items[${i}].stem`, item.stem], [`quiz.items[${i}].explanation`, item.explanation]);
-    item.options.forEach((option, j) => values.push([`quiz.items[${i}].options[${j}].text`, option.text], [`quiz.items[${i}].options[${j}].feedback`, option.feedback]));
-  });
-  return values;
-}
-
+/**
+ * No sign prefix on purpose: with `[+-]?` a scoreline like "2-1" parsed as
+ * [2, -1], so the digit 1 never entered the allowed set and every hyphenated
+ * score, range, or date poisoned the check.
+ */
 function extractNumbers(text: string): string[] {
-  return (text.match(/[+-]?\d[\d,]*(?:\.\d+)?/g) ?? []).map((value) => String(Number(value.replace(/,/g, ''))));
+  return (text.match(/\d[\d,]*(?:\.\d+)?/g) ?? []).map((value) => String(Number(value.replace(/,/g, ''))));
 }
 
 function issue(path: string, rule: string, message: string): ValidationIssue { return { path, rule, message }; }
