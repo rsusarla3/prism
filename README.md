@@ -44,6 +44,15 @@ npm run dev
 
 Open [http://localhost:8787](http://localhost:8787). The server binds to `0.0.0.0` by default for same-hotspot demos; set `HOST=127.0.0.1` to keep it local.
 
+For UI development with hot reload, keep the API server running and start Vite in another terminal:
+
+```bash
+npm run dev
+npm run dev:ui -w prism-web
+```
+
+The production build compiles the React UI into `apps/web/public`, where the dependency-free Node server serves it.
+
 ## Load the Chrome extension
 
 1. Open `chrome://extensions`.
@@ -78,7 +87,7 @@ npm run build
 2. Adjust manual contribution, horizon, return, and fee assumptions.
 3. Compare starting five years later and paying a higher fee.
 4. Review ETFs, individual stocks, and bonds.
-5. Generate the provider-ready Future Snapshot prompt.
+5. Use the local Future Snapshot illustration or opt into image generation with a user-provided key.
 
 ## Privacy and safety
 
@@ -87,7 +96,7 @@ npm run build
 - Financial data is manual and remains in memory for this demo.
 - No bank credentials, provider tokens, or model secrets are shipped to the extension.
 - Projections are illustrative, inflation-aware scenarios—not guarantees.
-- Image generation is represented by a server-only provider interface; V1 produces a prompt, not a misleading promised image.
+- Future Snapshot image generation is opt-in and browser-to-provider. A user-provided OpenAI API key is stored only in that browser's `localStorage`, never sent to Prism's server, logged, or committed. Without a key, Prism shows a local illustration.
 
 ## Known limitations
 
@@ -95,6 +104,6 @@ npm run build
 - The extension hands the confirmed goal to the web experience but the full session UI runs in the web app.
 - Volatility, taxes, employer matches, and individualized suitability are intentionally excluded.
 - The algebra verifier supports a constrained linear-expression grammar.
-- Future Snapshot generation needs a configured server-side image provider.
+- Browser-side image generation depends on provider CORS, account access, billing, rate limits, and content policy; the local illustration remains available when it fails.
 
 See [PRISM_HACKATHON_BUILD_SPEC.md](PRISM_HACKATHON_BUILD_SPEC.md), [AGENTS.md](AGENTS.md), and [CODEX_HANDOFF.md](CODEX_HANDOFF.md) for implementation details and next steps.

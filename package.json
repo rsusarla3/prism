@@ -8,7 +8,7 @@
     "apps/*"
   ],
   "scripts": {
-    "build": "npm run build -w prism-shared && npm run build -w prism-verifiers && npm run build -w prism-curriculum && npm run build -w prism-learning-engine && npm run build -w prism-api-client && npm run build -w prism-web",
+    "build": "npm run build -w prism-shared && npm run build -w prism-verifiers && npm run build -w prism-curriculum && npm run build -w prism-learning-engine && npm run build -w prism-api-client && npm run build -w prism-web && npm run build:ui -w prism-web",
     "typecheck": "tsc --noEmit -p packages/shared/tsconfig.json && tsc --noEmit -p packages/verifiers/tsconfig.json && tsc --noEmit -p packages/curriculum/tsconfig.json && tsc --noEmit -p packages/learning-engine/tsconfig.json && tsc --noEmit -p packages/api-client/tsconfig.json && tsc --noEmit -p apps/web/tsconfig.json",
     "lint": "npm run typecheck",
     "test": "npm run build && vitest run",
