@@ -166,19 +166,18 @@ The production build compiles the React UI into `apps/web/public`, where the dep
 1. Open `chrome://extensions`.
 2. Enable **Developer mode**.
 3. Select **Load unpacked** and choose `apps/extension`.
-4. Open the side panel from the extension toolbar and choose a ray: **Quiz**,
-   **Story**, **Digest**, **Numbers**, **Growth**, or **Your future**. The first
-   four use the captured page; Growth and Your future open the existing Prism
-   learning products.
-5. Prism uses Chrome's temporary `activeTab` access to capture only the active
-   page (or your explicit selected text), saves it locally, and generates only
-   the learning material represented by that ray.
-6. Click the same ray again to reopen its saved result without another model
-   request. Use **Open source library** to see all captured pages and assets.
+4. Open the side panel from the extension toolbar. Prism immediately analyzes
+   the active page or the text you explicitly selected.
+5. Choose one of the five modes: **Summarize**, **Quiz me**, **Key terms**,
+   **Visualize**, or **Listen**.
+6. Summary, quiz, key-term extraction, a downloadable SVG concept map, and
+   browser speech all have deterministic local paths. When the server has a
+   configured generation provider, Summary, Quiz, Visualize, and Listen can use
+   validated AI refinements that are cached in the source library.
 
-The extension does not monitor pages or browsing history. Active-page capture
-runs only after the learner invokes Prism and clicks a generated-learning ray;
-it reads only that active page or an explicit selection from the same page.
+The extension does not monitor other tabs or browsing history. Active-page
+capture runs only after the learner invokes Prism, and it reads only that page
+or an explicit selection from the same page.
 
 ## Quality commands
 
