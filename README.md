@@ -161,6 +161,14 @@ hosted providers. When both compatible and Gemini settings exist, the explicit
 compatible endpoint wins. Provider credentials stay in the server process and
 are never shipped in the Chrome extension.
 
+`POST /api/generate/media` is a second, optional pass: give it a study bundle
+and it returns the same bundle with `listen.audio` attached. It is deliberately
+a separate call so lesson text returns as soon as it is ready rather than
+waiting on speech synthesis. Media is additive — when no audio is attached, a
+renderer falls back to the browser's `SpeechSynthesis`, which also supplies the
+word boundaries that karaoke highlighting needs. `GEMINI_SPEECH_MODEL` and
+`GEMINI_VOICE` override the TTS model and voice.
+
 For UI development with hot reload, keep the API server running and start Vite in another terminal:
 
 ```bash

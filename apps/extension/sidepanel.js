@@ -3,6 +3,7 @@ import { DEFAULT_API_BASE, normalizeApiBase } from './config.js';
 import { redactSensitiveText } from './privacy.js';
 import { explainTerm } from './term-explanations.js';
 import { voicesForLanguage } from './speech-utils.js';
+import { classifyText, startSession, tutorQuizHtml, bindTutor } from './tutor.js';
 
 let apiBase = DEFAULT_API_BASE;
 const app = document.querySelector('#app');
@@ -120,6 +121,13 @@ async function requestGeneratedAsset(kind) {
   return post(`/api/sources/${encodeURIComponent(sourceId)}/assets/${kind}`, {
     homeLanguage: outputLanguage === 'source' ? undefined : outputLanguage,
   });
+}
+
+async function get(path) {
+  const response = await fetch(`${apiBase}${path}`);
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error || `Prism server returned ${response.status}.`);
+  return data;
 }
 
 async function post(path, body) {
@@ -614,6 +622,10 @@ async function showSummary() {
 async function showQuiz() {
   renderLoading('Building questions from this page…');
   await ensureSource();
+  // When the page maps to an approved curriculum concept, teach it through the
+  // server's tutoring session instead: hints, recorded attempts, mastery, and a
+  // solution that stays locked until the learner actually tries.
+  if (await tryAdaptiveQuiz()) return;
   let items = createLocalQuiz(pageSource.text, { headings: page.headings, language: analysis.language, limit: 5 });
   let source = 'Instant source-based quiz';
   try {
@@ -650,6 +662,24 @@ async function showQuiz() {
       card.querySelector('.quiz-explanation').hidden = false;
     }));
   });
+}
+
+/**
+ * Returns true when the tutoring session took over the Quiz ray.
+ * A page that matches no approved concept falls through to the page-derived
+ * quiz, so this never blocks the ordinary path.
+ */
+async function tryAdaptiveQuiz() {
+  try {
+    const classification = await classifyText(post, pageSource.text.slice(0, 4000));
+    if (!classification.conceptId) return false;
+    const session = await startSession(post, classification.conceptId);
+    finishResult(tutorQuizHtml(session, esc), 'Answers are scored on the server, so the solution stays locked until you attempt every question.');
+    bindTutor(session, { root: app, post, get, esc });
+    return true;
+  } catch {
+    return false; // Fall back to the page-derived quiz.
+  }
 }
 
 async function showKeyTerms() {
