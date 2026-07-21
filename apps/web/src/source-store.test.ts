@@ -56,4 +56,18 @@ describe('SourceStore', () => {
     db.saveSources([{ ...input, capturedAt: '2026-07-22T12:00:00.000Z' }]);
     expect(db.getLearningAsset(source.id, 'listen')).not.toBeNull();
   });
+
+  it('caches generated figures and invalidates them when source text changes', () => {
+    const db = store();
+    const [source] = db.saveSources([input]);
+    const saved = db.saveFigureAsset(source, {
+      mimeType: 'image/png', dataBase64: 'aGVsbG8=', altText: 'A source-grounded figure.',
+      model: 'gemini-image', promptVersion: 'v1',
+    });
+    expect(saved).toMatchObject({ dataUrl: 'data:image/png;base64,aGVsbG8=', cached: false });
+    expect(db.getFigureAsset(source.id, 'gemini-image', 'v1')).toMatchObject({ cached: true });
+    db.saveSources([{ ...input, text: 'Changed source text' }]);
+    expect(db.getFigureAsset(source.id, 'gemini-image', 'v1')).toBeNull();
+  });
+
 });

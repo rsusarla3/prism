@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { voicesForLanguage } from '../speech-utils.js';
+import { chunkSpeechText, voicesForLanguage } from '../speech-utils.js';
 
 describe('listen voice filtering', () => {
   const voices = [
@@ -16,5 +16,16 @@ describe('listen voice filtering', () => {
 
   it('does not fall back to unrelated voices', () => {
     expect(voicesForLanguage(voices, 'fr')).toEqual([]);
+  });
+});
+
+describe('speech chunking', () => {
+  it('keeps a long narration in short, readable utterances', () => {
+    const text = 'First sentence is short. Second sentence is also short. Third sentence should start a new chunk.';
+    expect(chunkSpeechText(text, 45)).toEqual([
+      'First sentence is short.',
+      'Second sentence is also short.',
+      'Third sentence should start a new chunk.',
+    ]);
   });
 });

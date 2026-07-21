@@ -19,7 +19,8 @@ curriculum data are not inputs to this pipeline.
 ## What to use first
 
 1. Keep the five modes useful without an API key. The current summary, quiz,
-   terms, SVG visual, and browser narration already satisfy that requirement.
+   terms, responsive HTML visual, and browser narration already satisfy that
+   requirement.
 2. Use one provider-neutral text seam. Prism supports Gemini directly and any
    OpenAI-compatible endpoint through `LLM_BASE_URL`, `LLM_MODEL`, and optional
    `LLM_API_KEY`.
@@ -27,9 +28,12 @@ curriculum data are not inputs to this pipeline.
    strong multilingual choice; use a model size that fits the host laptop.
 4. Add PaddleOCR only for screenshots or canvas content that has no accessible
    text. Ordinary pages should stay on the faster and more private DOM path.
-5. Keep Visualize as a reliable SVG concept map. Treat generated bitmap images
-   as an enhancement, not a dependency. Self-hosted image/video generation is
-   usually impractical on an ordinary hackathon laptop without a discrete GPU.
+5. Generate one source-grounded educational image for the active tab, using a
+   portrait layout, large labels, and a deep navy canvas that fits Prism's side
+   panel. Start the viewer enlarged and provide explicit zoom controls so dense
+   details remain readable. Detect bright legacy canvases and blend them into
+   the dark UI. Keep the deterministic local SVG concept map as the zero-key and
+   provider-error fallback.
 
 ## Important tradeoffs
 
