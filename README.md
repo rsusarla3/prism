@@ -147,6 +147,13 @@ and fill it in — `npm run dev` loads that file automatically. Without a key th
 route returns `501`; every other route works with no key. Optional
 `GEMINI_MODEL` overrides the default model id.
 
+`POST /api/generate/media` is a second, optional pass: give it a study bundle
+and it returns the same bundle with `listen.audio` attached. It is deliberately
+a separate call so the lesson text returns as soon as it is ready rather than
+waiting on speech synthesis. Media is additive — when no audio is attached, a
+renderer falls back to the browser's `SpeechSynthesis`, which also supplies the
+word boundaries that karaoke highlighting needs.
+
 For UI development with hot reload, keep the API server running and start Vite in another terminal:
 
 ```bash
