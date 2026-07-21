@@ -10,7 +10,7 @@ export interface GeminiClientOptions {
   model?: string;
 }
 
-export const DEFAULT_GEMINI_MODEL = 'gemini-3.5-flash';
+export const DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash';
 
 interface GeminiResponse {
   candidates?: Array<{
