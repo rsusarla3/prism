@@ -275,7 +275,7 @@ async function serveStatic(res: http.ServerResponse, urlPath: string) {
   }
 }
 
-type ExtensionDevFile = 'sidepanel.html' | 'sidepanel.js' | 'content-analysis.js' | 'capture-utils.js' | 'config.js' | 'privacy.js';
+type ExtensionDevFile = 'sidepanel.html' | 'sidepanel.js' | 'content-analysis.js' | 'capture-utils.js' | 'config.js' | 'privacy.js' | 'term-explanations.js' | 'speech-utils.js';
 
 async function serveExtensionDev(res: http.ServerResponse, filename: ExtensionDevFile) {
   const body = await readFile(path.join(EXTENSION_DIR, filename));
@@ -316,6 +316,12 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'GET' && url.pathname === '/extension-dev/privacy.js') {
       return serveExtensionDev(res, 'privacy.js');
+    }
+    if (req.method === 'GET' && url.pathname === '/extension-dev/term-explanations.js') {
+      return serveExtensionDev(res, 'term-explanations.js');
+    }
+    if (req.method === 'GET' && url.pathname === '/extension-dev/speech-utils.js') {
+      return serveExtensionDev(res, 'speech-utils.js');
     }
     if (req.method === 'GET' && url.pathname === '/api/health') {
       return send(res, 200, { ok: true });

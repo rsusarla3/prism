@@ -1,6 +1,8 @@
 import { analyzeContent, createLocalQuiz, summarizeText } from './content-analysis.js';
 import { DEFAULT_API_BASE, normalizeApiBase } from './config.js';
 import { redactSensitiveText } from './privacy.js';
+import { explainTerm } from './term-explanations.js';
+import { voicesForLanguage } from './speech-utils.js';
 
 let apiBase = DEFAULT_API_BASE;
 const app = document.querySelector('#app');
@@ -24,6 +26,7 @@ let analysis = null;
 let storedSourceId = null;
 let outputLanguage = 'source';
 const translatorCache = new Map();
+const termExplanationCache = new Map();
 
 function esc(value) {
   return String(value ?? '').replace(/[&<>'"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[char]);
@@ -305,17 +308,27 @@ async function showQuiz() {
 async function showKeyTerms() {
   renderLoading('Filtering noise and ranking concepts…');
   await ensureSource();
-  const translatedTerms = await translateValues(analysis.keyTerms.flatMap((term) => [term.term, term.contexts[0] || '']));
-  let termCopyIndex = 0;
-  const terms = analysis.keyTerms.map((term) => ({ ...term, term: translatedTerms.values[termCopyIndex++], contexts: [translatedTerms.values[termCopyIndex++], ...term.contexts.slice(1)] }));
+  const translatedTerms = await translateValues(analysis.keyTerms.map((term) => term.term));
+  const terms = analysis.keyTerms.map((term, index) => ({ ...term, originalTerm: term.term, term: translatedTerms.values[index] }));
   finishResult(`<div class="result-head"><span>Key terms</span><small>Frequency + relevance</small></div>
     <h3>${terms.length ? 'What this page keeps coming back to' : 'Not enough terms yet'}</h3>
     <div class="term-grid">${terms.map((term, index) => `<button class="term" data-term="${index}"><span>${esc(term.term)}</span><b>${term.count}×</b></button>`).join('')}</div>
-    <div class="term-context" id="term-context">Choose a term to see it in context.</div>`, translatedTerms.note || 'Common filler and interface words are removed; repeated phrases and heading terms rank higher.');
-  document.querySelectorAll('[data-term]').forEach((button) => button.addEventListener('click', () => {
+    <div class="term-context" id="term-context" aria-live="polite">Choose a term for a plain-language explanation.</div>`, translatedTerms.note || 'Choose any concept to learn what it means—not merely where it appeared.');
+  document.querySelectorAll('[data-term]').forEach((button) => button.addEventListener('click', async () => {
     const term = terms[Number(button.dataset.term)];
     document.querySelectorAll('[data-term]').forEach((candidate) => candidate.classList.toggle('active', candidate === button));
-    document.querySelector('#term-context').innerHTML = `<b>${esc(term.term)}</b><p>${esc(term.contexts[0] || 'No additional context found.')}</p>`;
+    const panel = document.querySelector('#term-context');
+    panel.innerHTML = `<b>${esc(term.term)}</b><p>Explaining this concept…</p>`;
+    const cacheKey = `${analysis.language}:${outputLanguage}:${term.originalTerm}`;
+    let explanation = termExplanationCache.get(cacheKey);
+    if (!explanation) {
+      const result = await explainTerm(term.originalTerm, { contexts: term.contexts, language: analysis.language });
+      const translated = await translateValues([result.definition]);
+      explanation = { definition: translated.values[0], source: result.source, note: translated.note };
+      termExplanationCache.set(cacheKey, explanation);
+    }
+    if (!button.classList.contains('active')) return;
+    panel.innerHTML = `<b>${esc(term.term)}</b><p>${esc(explanation.definition)}</p><small>${esc(explanation.source)}${explanation.note ? ` · ${esc(explanation.note)}` : ''}</small>`;
   }));
 }
 
@@ -381,19 +394,27 @@ async function showListen() {
 
 function bindSpeech(copy) {
   const voiceSelect = document.querySelector('#listen-voice');
+  const playButton = document.querySelector('#listen-play');
+  const targetLanguage = outputLanguage === 'source' ? (analysis?.language || pageSource?.language || page?.language || 'en') : outputLanguage;
+  let matchingVoices = [];
   const loadVoices = () => {
-    const voices = speechSynthesis.getVoices();
-    voiceSelect.innerHTML = voices.map((voice, index) => `<option value="${index}">${esc(voice.name)} · ${esc(voice.lang)}</option>`).join('');
+    matchingVoices = voicesForLanguage(speechSynthesis.getVoices(), targetLanguage);
+    voiceSelect.innerHTML = matchingVoices.length
+      ? matchingVoices.map((voice, index) => `<option value="${index}">${esc(voice.name)} · ${esc(voice.lang)}</option>`).join('')
+      : `<option value="">No ${esc(languageName(targetLanguage))} voice installed</option>`;
+    voiceSelect.disabled = matchingVoices.length === 0;
+    playButton.disabled = matchingVoices.length === 0;
+    if (!matchingVoices.length) document.querySelector('#voice-status').textContent = `Install a ${languageName(targetLanguage)} system voice to listen in this language.`;
   };
   loadVoices();
   speechSynthesis.addEventListener?.('voiceschanged', loadVoices, { once: true });
-  document.querySelector('#listen-play').onclick = () => {
+  playButton.onclick = () => {
     speechSynthesis.cancel();
     const scope = document.querySelector('#listen-scope').value;
     const utterance = new SpeechSynthesisUtterance(copy[scope]);
     utterance.rate = Number(document.querySelector('#listen-rate').value);
-    const voices = speechSynthesis.getVoices();
-    utterance.voice = voices[Number(voiceSelect.value)] || null;
+    utterance.lang = matchingVoices[Number(voiceSelect.value)]?.lang || targetLanguage;
+    utterance.voice = matchingVoices[Number(voiceSelect.value)] || null;
     utterance.onstart = () => { document.querySelector('#voice-status').textContent = 'Playing…'; };
     utterance.onend = () => { document.querySelector('#voice-status').textContent = 'Finished.'; };
     speechSynthesis.speak(utterance);
