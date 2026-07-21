@@ -40,7 +40,8 @@ import {
   SUGGESTED_KEYWORDS,
   FUTURE_GOALS,
 } from 'prism-verifiers';
-import { attachMedia, buildEducationalFigurePrompt, createGeminiClient, createGeminiFigureClient, createGeminiSpeechClient, createOpenAICompatibleClient, FIGURE_PROMPT_VERSION, generateLearningAsset, generateStudyBundle, prepareGenerateRequest, type LLMClient } from 'prism-generation';
+import { generateLearningAsset, generateStudyBundle, createGeminiClient, createOpenAICompatibleClient, prepareGenerateRequest, attachMedia, createGeminiSpeechClient, type LLMClient } from 'prism-generation';
+import { buildEducationalFigurePrompt, createGeminiFigureClient, FIGURE_PROMPT_VERSION } from 'prism-generation';
 import type { LearningAssetKind } from 'prism-shared';
 import { prepareCapturedSources } from './capture.js';
 import { SourceStore } from './source-store.js';
