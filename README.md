@@ -32,13 +32,14 @@ flowchart TD
 
     classDef done fill:#e2e8f0,stroke:#334155,stroke-width:2px,color:#0f172a;
     classDef todo fill:#ffffff,stroke:#94a3b8,stroke-width:2px,stroke-dasharray:5 4,color:#334155;
-    class PAGE,VER,OUT done;
-    class EXT,UND,GEN todo;
+    class PAGE,UND,GEN,VER,OUT done;
+    class EXT todo;
 ```
 
-Solid nodes exist today. Dashed nodes are the build ahead: capture, understand,
-and generate are the hackathon's main work, while the verifiers and lesson UI
-already ship.
+Solid nodes exist today. Understand and Generate are one structured model call
+behind `POST /api/generate`: the same response reports the inferred grade and
+concepts and carries the five assets. Capture is the remaining dashed node — the
+extension work that hands a selection to that route.
 
 ### Generated assets and their evidence
 
@@ -141,9 +142,10 @@ Open [http://localhost:8787](http://localhost:8787). The server binds to `0.0.0.
 
 `POST /api/generate` (raw text to study bundle, see
 [`docs/prism/GENERATION_SPEC.md`](docs/prism/GENERATION_SPEC.md)) needs a
-`GEMINI_API_KEY` environment variable. Without it the route returns `501`;
-every other route works with no key. Optional `GEMINI_MODEL` overrides the
-default model id.
+`GEMINI_API_KEY`. Copy [`.env.example`](.env.example) to `.env` at the repo root
+and fill it in — `npm run dev` loads that file automatically. Without a key the
+route returns `501`; every other route works with no key. Optional
+`GEMINI_MODEL` overrides the default model id.
 
 For UI development with hot reload, keep the API server running and start Vite in another terminal:
 
