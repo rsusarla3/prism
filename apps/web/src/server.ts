@@ -102,7 +102,9 @@ function handleFutureInvest(body: { startingBalance: number; monthlyContribution
 // dev without a key still works for every other endpoint.
 const geminiApiKey = process.env.GEMINI_API_KEY;
 const llmClient: LLMClient | null = geminiApiKey
-  ? createGeminiClient({ apiKey: geminiApiKey, model: process.env.GEMINI_MODEL })
+  // `|| undefined` so an empty GEMINI_MODEL= line in .env falls back to the
+  // default instead of building a modelless URL (?? would keep the empty string).
+  ? createGeminiClient({ apiKey: geminiApiKey, model: process.env.GEMINI_MODEL || undefined })
   : null;
 
 async function handleGenerate(body: unknown) {
