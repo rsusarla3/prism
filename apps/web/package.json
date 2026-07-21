@@ -14,6 +14,7 @@
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "prism-shared": "^0.1.0",
+    "prism-generation": "^0.1.0",
     "prism-verifiers": "^0.1.0",
     "prism-curriculum": "^0.1.0",
     "prism-learning-engine": "^0.1.0"

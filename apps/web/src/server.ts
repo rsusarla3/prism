@@ -16,6 +16,7 @@ import path from 'node:path';
 import os from 'node:os';
 
 import { parseFiniteAll } from 'prism-shared';
+import type { GenerateRequest } from 'prism-shared';
 import {
   compareGrowth,
   projectInvestment,
@@ -25,6 +26,7 @@ import {
   SUGGESTED_KEYWORDS,
   FUTURE_GOALS,
 } from 'prism-verifiers';
+import { generateStudyBundle, type LLMClient } from 'prism-generation';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
@@ -84,6 +86,26 @@ function handleFutureInvest(body: { startingBalance: number; monthlyContribution
   return { projection, comparisons, check };
 }
 
+// --- Generation: raw captured text -> validated study bundle ---
+// No LLM provider is wired yet (see docs/prism/GENERATION_SPEC.md). Plugging
+// one in is a one-line change here once a provider is chosen; until then the
+// route reports 501 so callers get a clear signal instead of a silent stub.
+const llmClient: LLMClient | null = null;
+
+async function handleGenerate(body: GenerateRequest) {
+  if (!llmClient) {
+    throw Object.assign(new Error('No LLM provider configured yet.'), { status: 501 });
+  }
+  if (!body.text || body.text.trim() === '') {
+    throw Object.assign(new Error('text is required.'), { status: 400 });
+  }
+  const result = await generateStudyBundle(body, llmClient);
+  if (!result.bundle) {
+    throw Object.assign(new Error('Generation failed validation.'), { status: 502, issues: result.issues });
+  }
+  return result.bundle;
+}
+
 // ---------------------------------------------------------------------------
 // Static demo UI
 // ---------------------------------------------------------------------------
@@ -130,10 +152,14 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && url.pathname === '/api/future/content') {
       return send(res, 200, { assetClasses: ASSET_CLASSES, suggestedKeywords: SUGGESTED_KEYWORDS, futureGoals: FUTURE_GOALS });
     }
+    if (req.method === 'POST' && url.pathname === '/api/generate') {
+      return send(res, 200, await handleGenerate(await readBody<GenerateRequest>(req)));
+    }
     send(res, 404, { error: 'Not found' });
   } catch (e) {
     const status = (e as { status?: number }).status ?? 400;
-    send(res, status, { error: (e as Error).message });
+    const issues = (e as { issues?: unknown }).issues;
+    send(res, status, { error: (e as Error).message, ...(issues ? { issues } : {}) });
   }
 });
 
