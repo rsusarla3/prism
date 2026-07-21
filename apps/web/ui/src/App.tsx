@@ -28,9 +28,9 @@ function Home({go}:{go:(v:View)=>void}){
 
   return <section className="home page-enter">
     <div className="hero-copy">
-      <p className="kicker">Adaptive learning, refracted</p>
-      <h1>Find the way<br/>that makes it <em>click.</em></h1>
-      <p className="lede">The same idea can look completely different through a graph, a story, a simulation, or your own future.</p>
+      <p className="kicker">One concept, refracted</p>
+      <h1>Point it at any page.<br/>Get it back in a form that <em>sticks.</em></h1>
+      <p className="lede">Prism reads the page you’re already on and refracts it — into a digest, a simulation, a projection. Same concept, whichever way finally makes it land.</p>
       <div className="home-actions">
         <button className="primary" onClick={()=>go('core')}>Explore the math <span>↗</span></button>
         <button className="secondary" onClick={()=>go('future')}>Picture your future <span>→</span></button>
