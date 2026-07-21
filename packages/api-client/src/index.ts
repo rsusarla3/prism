@@ -4,6 +4,13 @@
  */
 
 import type {
+  CaptureSourcesRequest,
+  CaptureSourcesResponse,
+  CapturedSource,
+  GenerateStoredSourceRequest,
+  LearningMaterial,
+  LearningAsset,
+  LearningAssetKind,
   StartSessionRequest,
   StartSessionResponse,
   SubmitAttemptRequest,
@@ -42,5 +49,29 @@ export class PrismApiClient {
 
   savePlan(req: SavePlanRequest): Promise<{ ok: true }> {
     return this.post('/api/plan/save', req);
+  }
+
+  captureSources(req: CaptureSourcesRequest): Promise<CaptureSourcesResponse> {
+    return this.post('/api/sources/capture', req);
+  }
+
+  generateMaterial(sourceId: string, req: GenerateStoredSourceRequest = {}): Promise<LearningMaterial> {
+    return this.post(`/api/sources/${encodeURIComponent(sourceId)}/generate`, req);
+  }
+
+  generateAsset(sourceId: string, kind: LearningAssetKind, req: GenerateStoredSourceRequest = {}): Promise<LearningAsset> {
+    return this.post(`/api/sources/${encodeURIComponent(sourceId)}/assets/${kind}`, req);
+  }
+
+  async listSources(): Promise<CapturedSource[]> {
+    const res = await fetch(`${this.baseUrl}/api/sources`);
+    if (!res.ok) throw new Error(`Prism API ${res.status}: ${await res.text()}`);
+    return ((await res.json()) as { sources: CapturedSource[] }).sources;
+  }
+
+  async listMaterials(): Promise<LearningMaterial[]> {
+    const res = await fetch(`${this.baseUrl}/api/materials`);
+    if (!res.ok) throw new Error(`Prism API ${res.status}: ${await res.text()}`);
+    return ((await res.json()) as { materials: LearningMaterial[] }).materials;
   }
 }

@@ -22,7 +22,7 @@ grounded in peer-reviewed learning science
 %%{init: {'theme':'base','themeVariables':{'fontSize':'20px','fontFamily':'system-ui, sans-serif','primaryColor':'#f8fafc','primaryTextColor':'#0f172a','primaryBorderColor':'#475569','lineColor':'#94a3b8'}}}%%
 flowchart TD
     PAGE["Any web page<br/>article, problem, or chart"]
-    EXT["1 &nbsp; Capture<br/>extension reads the selection"]
+    EXT["1 &nbsp; Capture<br/>extension reads confirmed tabs or a selection"]
     UND["2 &nbsp; Understand<br/>concept, reading level, intent"]
     GEN["3 &nbsp; Generate<br/>model builds study assets<br/>within curriculum guardrails"]
     VER["4 &nbsp; Verify<br/>deterministic math, answer gate"]
@@ -36,10 +36,9 @@ flowchart TD
     class EXT todo;
 ```
 
-Solid nodes exist today. Understand and Generate are one structured model call
-behind `POST /api/generate`: the same response reports the inferred grade and
-concepts and carries the five assets. Capture is the remaining dashed node — the
-extension work that hands a selection to that route.
+Capture, persistence, structured generation, validation, and the lesson library
+now run end to end. The learner explicitly chooses which tabs or selection to
+share before Prism reads page text.
 
 ### Generated assets and their evidence
 
@@ -140,19 +139,35 @@ npm run dev
 
 Open [http://localhost:8787](http://localhost:8787). The server binds to `0.0.0.0` by default for same-hotspot demos; set `HOST=127.0.0.1` to keep it local.
 
-`POST /api/generate` (raw text to study bundle, see
-[`docs/prism/GENERATION_SPEC.md`](docs/prism/GENERATION_SPEC.md)) needs a
-`GEMINI_API_KEY`. Copy [`.env.example`](.env.example) to `.env` at the repo root
-and fill it in — `npm run dev` loads that file automatically. Without a key the
-route returns `501`; every other route works with no key. Optional
-`GEMINI_MODEL` overrides the default model id.
+For the GitHub extension dev-mode preview, open
+[http://localhost:8787/extension-dev/](http://localhost:8787/extension-dev/).
+It supplies one sample page when opened outside Chrome's extension runtime,
+while still using the real local source-library API.
+
+Copy [`.env.example`](.env.example) to `.env` at the repository root; `npm run
+dev` loads it automatically. AI generation can use either a server-side
+`GEMINI_API_KEY` or an OpenAI-compatible endpoint. Without a configured
+provider, generation returns `501`; capture and the rest of the app still work.
+Optional `GEMINI_MODEL` overrides the Gemini default.
+Captured sources and their generated learning assets are stored in
+`data/prism.sqlite`; optional `PRISM_DB_PATH` changes that location. Each asset
+is generated and cached separately: selecting one ray never requests the other
+assets.
+
+For a credential-free local engine, run an OpenAI-compatible server such as
+Ollama and set `LLM_BASE_URL=http://127.0.0.1:11434/v1` plus `LLM_MODEL` to the
+installed model name. `LLM_API_KEY` is optional and is intended for compatible
+hosted providers. When both compatible and Gemini settings exist, the explicit
+compatible endpoint wins. Provider credentials stay in the server process and
+are never shipped in the Chrome extension.
 
 `POST /api/generate/media` is a second, optional pass: give it a study bundle
 and it returns the same bundle with `listen.audio` attached. It is deliberately
-a separate call so the lesson text returns as soon as it is ready rather than
+a separate call so lesson text returns as soon as it is ready rather than
 waiting on speech synthesis. Media is additive — when no audio is attached, a
 renderer falls back to the browser's `SpeechSynthesis`, which also supplies the
-word boundaries that karaoke highlighting needs.
+word boundaries that karaoke highlighting needs. `GEMINI_SPEECH_MODEL` and
+`GEMINI_VOICE` override the TTS model and voice.
 
 For UI development with hot reload, keep the API server running and start Vite in another terminal:
 
@@ -168,15 +183,40 @@ The production build compiles the React UI into `apps/web/public`, where the dep
 1. Open `chrome://extensions`.
 2. Enable **Developer mode**.
 3. Select **Load unpacked** and choose `apps/extension`.
-4. Highlight ordinary webpage text and choose **Learn this with Prism** from the context menu.
-5. Confirm the selection and choose a learning goal in the side panel.
+4. Open the side panel from the extension toolbar. Prism immediately analyzes
+   the active page or the text you explicitly selected.
+5. Choose one of the five modes: **Summarize**, **Quiz me**, **Key terms**,
+   **Visualize**, or **Listen**.
+6. Summary, quiz, key-term extraction, a downloadable SVG concept map, and
+   browser speech all have deterministic local paths. When the server has a
+   configured generation provider, Summary, Quiz, Visualize, and Listen can use
+   validated AI refinements that are cached in the source library.
 
-The side panel then posts the selection to `POST /api/generate` and renders the
-returned lesson in place, so the server must be running (`npm run dev`) with a
-`GEMINI_API_KEY` set. Narration plays through the browser's own speech
-synthesis, whose word-boundary events drive the karaoke highlighting.
+The extension does not monitor other tabs or browsing history. Active-page
+capture runs only after the learner invokes Prism, and it reads only that page
+or an explicit selection from the same page.
 
-The extension requests only `sidePanel`, `storage`, `contextMenus`, and temporary `activeTab` access. It does not request browsing history or broad host access, monitor pages, or read other tabs.
+Prism requests HTTP/HTTPS host access because Chrome does not consistently
+extend `activeTab` access to a persistent side panel. This permission makes the
+"works on any website" interaction reliable; the implementation still queries
+only the currently active tab after invocation, never scans tabs in the
+background, and applies the sensitive-page guard before automatic capture.
+
+All five extension modes are curriculum-neutral. Their only content input is
+the active page or explicit selection: Prism Core and Prism Future demo content
+is never injected into extension results. The local analyzer ranks terms using
+page frequency, headings, position, and language-specific filler-word filters.
+It supports readable text inside permitted page frames and accessible labels
+for equations, diagrams, and canvases. Sensitive account, health, email, and
+password pages are blocked from automatic capture; selected text remains the
+explicit fallback.
+
+Results can be shown in the page language or English, Mandarin Chinese, Hindi,
+Spanish, French, Arabic, Bengali, Portuguese, Russian, or Urdu. This choice
+applies to all five modes, including quiz feedback, visual labels, and spoken
+copy. Prism tries Chrome's on-device translator first, falls back to the
+configured server engine, and visibly preserves the source language if neither
+path supports the requested pair.
 
 ## Quality commands
 
@@ -207,6 +247,7 @@ npm run build
 ## Privacy and safety
 
 - Selected page content is treated as untrusted and shown before use.
+- Open-tab capture is user-initiated, permission-gated, and selection-based.
 - Original homework answers remain server-gated until a meaningful attempt.
 - Financial data is manual and remains in memory for this demo.
 - No bank credentials, provider tokens, or model secrets are shipped to the extension.
@@ -215,7 +256,10 @@ npm run build
 
 ## Known limitations
 
-- In-memory sessions and plans reset with the server.
+- Sessions and plans remain in memory, while source-library records persist in
+  local SQLite.
+- The local source library has no user accounts or tenant isolation yet and is
+  intended for single-user development only.
 - The extension hands the confirmed goal to the web experience but the full session UI runs in the web app.
 - Volatility, taxes, employer matches, and individualized suitability are intentionally excluded.
 - The algebra verifier supports a constrained linear-expression grammar.
