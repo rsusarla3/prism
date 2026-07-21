@@ -16,3 +16,6 @@ export { STUDY_BUNDLE_JSON_SCHEMA } from './schema.js';
 export { generateLearningAsset } from './asset.js';
 export type { GenerateAssetResult } from './asset.js';
 export { LEARNING_ASSET_JSON_SCHEMAS } from './asset-schema.js';
+export { buildEducationalFigurePrompt, FIGURE_PROMPT_VERSION } from './figure.js';
+export { createGeminiFigureClient, DEFAULT_GEMINI_FIGURE_MODEL } from './providers/gemini-figure.js';
+export type { FigureClient, FigureImage, GeminiFigureClientOptions } from './providers/gemini-figure.js';

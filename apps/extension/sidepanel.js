@@ -1,4 +1,5 @@
 import { analyzeContent, createLocalQuiz, summarizeText } from './content-analysis.js';
+import { buildConceptMap, connectedConcepts } from './concept-map.js';
 import { DEFAULT_API_BASE, normalizeApiBase } from './config.js';
 import { redactSensitiveText } from './privacy.js';
 import { explainTerm } from './term-explanations.js';
@@ -11,7 +12,7 @@ const WAYS = [
   { id: 'summarize', label: 'Summarize', hint: 'The page in a few clear points', color: 'var(--ray-1)', run: showSummary },
   { id: 'quiz', label: 'Quiz me', hint: 'Answer first, then see why', color: 'var(--ray-2)', run: showQuiz },
   { id: 'terms', label: 'Key terms', hint: 'The concepts that matter most', color: 'var(--ray-3)', run: showKeyTerms },
-  { id: 'visualize', label: 'Visualize', hint: 'One map of the whole idea', color: 'var(--ray-4)', run: showVisualize },
+  { id: 'visualize', label: 'Visualize', hint: 'One picture of the whole idea', color: 'var(--ray-4)', run: showVisualize },
   { id: 'listen', label: 'Listen', hint: 'Read aloud at your pace', color: 'var(--ray-5)', run: showListen },
 ];
 let sceneObserver = null;
@@ -128,6 +129,14 @@ async function get(path) {
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data.error || `Prism server returned ${response.status}.`);
   return data;
+}
+
+async function requestGeneratedFigure(regenerate = false) {
+  const sourceId = await ensureStoredSource();
+  return post(`/api/sources/${encodeURIComponent(sourceId)}/figure`, {
+    homeLanguage: outputLanguage === 'source' ? undefined : languageName(outputLanguage),
+    regenerate,
+  });
 }
 
 async function post(path, body) {
@@ -418,7 +427,7 @@ function languageName(code) {
   return OUTPUT_LANGUAGES.find(([value]) => value === code)?.[1] ?? code;
 }
 
-async function translateValues(values) {
+async function translateValues(values, { allowServerFallback = true } = {}) {
   const sourceLanguage = analysis?.language || pageSource?.language || page?.language || 'en';
   const targetLanguage = outputLanguage === 'source' ? sourceLanguage : outputLanguage;
   if (targetLanguage === sourceLanguage || outputLanguage === 'source') return { values, note: '' };
@@ -436,6 +445,9 @@ async function translateValues(values) {
     for (const value of values) translated.push(await translator.translate(String(value ?? '')));
     return { values: translated, note: `Translated on-device to ${languageName(targetLanguage)}.` };
   } catch (browserError) {
+    if (!allowServerFallback) {
+      return { values, note: `${languageName(targetLanguage)} needs an on-device language pack; showing the page language.` };
+    }
     try {
       const translated = await post('/api/translate', { texts: values, sourceLanguage, targetLanguage });
       if (Array.isArray(translated.texts) && translated.texts.length === values.length) {
@@ -712,32 +724,156 @@ async function showKeyTerms() {
 async function showVisualize() {
   renderLoading('Drawing the relationships…');
   await ensureSource();
-  let nodes = analysis.keyTerms.slice(0, 6).map((term) => ({ label: term.term, detail: term.contexts[0] || '' }));
-  let source = 'Generated locally from ranked concepts';
+  let map = buildConceptMap({ title: pageSource.title, ...analysis });
+  const sourceCopy = [map.title, map.summary, ...map.nodes.flatMap((node) => [node.label, node.detail]), ...map.relations.map((relation) => relation.evidence)];
+  const visualCopy = await translateValues(sourceCopy, { allowServerFallback: false });
+  let copyIndex = 0;
+  map = { ...map, title: visualCopy.values[copyIndex++], summary: visualCopy.values[copyIndex++],
+    nodes: map.nodes.map((node) => ({ ...node, label: visualCopy.values[copyIndex++], detail: visualCopy.values[copyIndex++] })),
+    relations: map.relations.map((relation) => ({ ...relation, evidence: visualCopy.values[copyIndex++] })),
+  };
+  renderLocalVisual(map, visualCopy.note, 'Creating an AI figure when Gemini is available…');
   try {
-    const asset = await requestGeneratedAsset('watch');
-    nodes = asset.payload.steps.slice(0, 6).map((step) => ({ label: step.caption, detail: step.description }));
-    source = asset.cached ? 'Saved AI-refined visual plan' : 'AI-refined visual plan';
-  } catch { /* The deterministic concept map remains available. */ }
-  const visualCopy = await translateValues([pageSource.title, analysis.summary[0] || pageSource.title, ...nodes.map((node) => node.label)]);
-  const visualTitle = visualCopy.values[0];
-  const visualSummary = visualCopy.values[1];
-  nodes = nodes.map((node, index) => ({ ...node, label: visualCopy.values[index + 2] }));
-  const svg = conceptMapSvg(visualTitle, nodes, visualSummary);
-  finishResult(`<div class="result-head"><span>Visualize</span><small>${esc(source)}</small></div>${svg}
-    <p class="visual-caption">${esc(visualSummary)}</p><button class="fig" id="download-visual">Download SVG</button>`, visualCopy.note || 'One coherent concept map is created from this page—not a generic stock image.');
+    const figure = await requestGeneratedFigure();
+    if (document.querySelector('#visual-ai-status')) renderAiVisual(map, figure, visualCopy.note);
+  } catch (error) {
+    const status = document.querySelector('#visual-ai-status');
+    const sourceLabel = document.querySelector('.result-head small');
+    if (sourceLabel) sourceLabel.textContent = 'AI unavailable · local fallback';
+    if (status) {
+      status.classList.add('error');
+      status.textContent = error?.message?.includes('not configured')
+        ? 'Gemini is not configured, so the private local concept map is shown.'
+        : `AI figure unavailable; local map retained. ${truncate(error?.message || '', 120)}`;
+    }
+  }
+}
+
+function localVisualMarkup(map) {
+  return `${conceptMapSvg(map)}<div class="visual-detail" id="visual-detail" aria-live="polite"><b>${esc(map.title)}</b><p>${esc(map.summary)}</p><small>Choose a concept to see its source evidence.</small></div>`;
+}
+
+function renderLocalVisual(map, translationNote = '', aiStatus = '') {
+  finishResult(`<div class="result-head"><span>Visualize</span><small>Local · source-grounded</small></div>${localVisualMarkup(map)}
+    ${aiStatus ? `<p class="ai-status" id="visual-ai-status"><i></i>${esc(aiStatus)}</p>` : ''}
+    <button class="fig" id="download-visual">Download SVG</button>`, translationNote || 'Built privately on this device from concepts and relationships found on the page.');
+  bindConceptMap(map);
   document.querySelector('#download-visual')?.addEventListener('click', () => downloadSvg(document.querySelector('.concept-map').outerHTML));
 }
 
-function conceptMapSvg(title, nodes, summary = '') {
+function renderAiVisual(map, figure, translationNote = '') {
+  const sourceLabel = figure.cached ? 'Saved AI figure · no new charge' : 'New AI figure · Gemini';
+  finishResult(`<div class="result-head"><span>Visualize</span><small>${esc(sourceLabel)}</small></div>
+    <div class="figure-zoom" role="group" aria-label="Figure zoom"><button class="active" data-figure-zoom="fit">Fit</button><button data-figure-zoom="150">150%</button><button data-figure-zoom="200">200%</button></div>
+    <div class="figure-panel" id="ai-figure-panel" data-zoom="fit"><img class="ai-figure" src="${esc(figure.dataUrl)}" alt="${esc(figure.altText)}"></div>
+    <div class="figure-panel local-panel" id="local-figure-panel" hidden>${localVisualMarkup(map)}</div>
+    <div class="segmented figure-switch" role="group" aria-label="Visualization type"><button class="active" data-figure-view="ai">AI figure</button><button data-figure-view="local">Evidence map</button></div>
+    <p class="figure-caption">The full figure fits the panel automatically. Use 150% or 200% when you want to inspect details.</p>
+    <div class="figure-actions"><button class="fig" id="download-figure">Download PNG</button><button class="fig" id="regenerate-figure">Regenerate (~$0.039)</button></div>`, translationNote || 'The Gemini key stays on the Prism server. Bright image backgrounds are adapted to Prism automatically.');
+  bindConceptMap(map);
+  const image = document.querySelector('.ai-figure');
+  if (image.complete) adaptFigureBackground(image);
+  else image.addEventListener('load', () => adaptFigureBackground(image), { once: true });
+  document.querySelectorAll('[data-figure-zoom]').forEach((button) => button.addEventListener('click', () => {
+    const panel = document.querySelector('#ai-figure-panel');
+    panel.dataset.zoom = button.dataset.figureZoom;
+    document.querySelectorAll('[data-figure-zoom]').forEach((candidate) => candidate.classList.toggle('active', candidate === button));
+  }));
+  document.querySelectorAll('[data-figure-view]').forEach((button) => button.addEventListener('click', () => {
+    const showAi = button.dataset.figureView === 'ai';
+    document.querySelector('#ai-figure-panel').hidden = !showAi;
+    document.querySelector('#local-figure-panel').hidden = showAi;
+    document.querySelector('.figure-zoom').hidden = !showAi;
+    document.querySelectorAll('[data-figure-view]').forEach((candidate) => candidate.classList.toggle('active', candidate === button));
+  }));
+  document.querySelector('#download-figure')?.addEventListener('click', () => downloadDataUrl(figure.dataUrl, figure.mimeType));
+  document.querySelector('#regenerate-figure')?.addEventListener('click', async (event) => {
+    if (!confirm('Generate a new image? This makes a paid Gemini request (about $0.039 at current pricing).')) return;
+    const button = event.currentTarget;
+    button.disabled = true;
+    button.textContent = 'Regenerating…';
+    try {
+      const replacement = await requestGeneratedFigure(true);
+      renderAiVisual(map, replacement, translationNote);
+    } catch (error) {
+      button.disabled = false;
+      button.textContent = 'Regenerate (~$0.039)';
+      alert(`Could not regenerate the figure. ${truncate(error?.message || '', 160)}`);
+    }
+  });
+}
+
+function adaptFigureBackground(image) {
+  try {
+    const canvas = document.createElement('canvas');
+    canvas.width = 12;
+    canvas.height = 12;
+    const context = canvas.getContext('2d', { willReadFrequently: true });
+    context.drawImage(image, 0, 0, 12, 12);
+    const pixels = context.getImageData(0, 0, 12, 12).data;
+    let bright = 0;
+    for (let index = 0; index < pixels.length; index += 4) {
+      if ((pixels[index] + pixels[index + 1] + pixels[index + 2]) / 3 > 235 && pixels[index + 3] > 220) bright += 1;
+    }
+    image.classList.toggle('blend-light-background', bright / (pixels.length / 4) > 0.55);
+  } catch { /* The original image remains usable if sampling is unavailable. */ }
+}
+
+function textLines(value, x, y, { width = 18, lines = 2, className = '' } = {}) {
+  const words = String(value ?? '').trim().split(/\s+/u);
+  const rows = [];
+  let row = '';
+  for (const word of words) {
+    const candidate = row ? `${row} ${word}` : word;
+    if (candidate.length <= width || !row) row = candidate;
+    else { rows.push(row); row = word; }
+  }
+  if (row) rows.push(row);
+  const visible = rows.slice(0, lines);
+  if (rows.length > lines) visible[lines - 1] = truncate(visible[lines - 1], Math.max(4, width - 1));
+  const startY = y - ((visible.length - 1) * 6);
+  return `<text${className ? ` class="${className}"` : ''} x="${x}" y="${startY}">${visible.map((line, index) => `<tspan x="${x}" dy="${index ? 12 : 0}">${esc(line)}</tspan>`).join('')}</text>`;
+}
+
+function conceptMapSvg(map) {
   const positions = [[160,38],[258,82],[250,172],[160,212],[70,172],[62,82]];
-  const safeNodes = nodes.length ? nodes : [{ label: 'Main idea', detail: '' }];
-  return `<svg class="concept-map" viewBox="0 0 320 250" role="img" aria-label="Concept map for ${esc(title)}">
+  const positionById = new Map(map.nodes.map((node, index) => [node.id, positions[index % positions.length]]));
+  return `<svg class="concept-map" viewBox="0 0 320 250" role="img" aria-label="Concept map for ${esc(map.title)}">
+    <style>.map-topic-edge{stroke:#4d5775;stroke-width:1.5}.map-relation{stroke:#46d9a0;stroke-width:2.5;stroke-linecap:round}.map-node rect{fill:#1b2030;stroke:#4d5775}.map-node text{fill:#f5f7ff}.map-center{fill:url(#map-center);stroke:none}.map-title{fill:#fff;font-weight:700}.map-summary{fill:#fff;opacity:.82}</style>
     <defs><linearGradient id="map-center" x1="0" x2="1"><stop stop-color="#ff9f45"/><stop offset="1" stop-color="#a06bff"/></linearGradient></defs>
-    ${safeNodes.map((node, index) => `<path d="M160 125 L${positions[index % positions.length][0]} ${positions[index % positions.length][1]}"/>`).join('')}
-    <rect class="map-center" x="93" y="96" width="134" height="58" rx="16"/><text class="map-title" x="160" y="121">${esc(truncate(title, 26))}</text><text class="map-title small" x="160" y="139">${esc(truncate(summary || 'Main idea', 38))}</text>
-    ${safeNodes.map((node, index) => { const [x,y]=positions[index % positions.length]; return `<g><rect x="${x-51}" y="${y-18}" width="102" height="36" rx="12"/><text x="${x}" y="${y+4}">${esc(truncate(node.label, 18))}</text></g>`; }).join('')}
+    ${map.nodes.map((node) => { const [x, y] = positionById.get(node.id); return `<path class="map-topic-edge" data-from="center" data-to="${node.id}" d="M160 125 L${x} ${y}"/>`; }).join('')}
+    ${map.relations.map((relation) => { const [x1, y1] = positionById.get(relation.from); const [x2, y2] = positionById.get(relation.to); return `<path class="map-relation" data-from="${relation.from}" data-to="${relation.to}" d="M${x1} ${y1} L${x2} ${y2}"/>`; }).join('')}
+    <rect class="map-center" x="93" y="96" width="134" height="58" rx="16"/>${textLines(map.title, 160, 119, { width: 24, className: 'map-title' })}${textLines(map.summary, 160, 140, { width: 34, lines: 1, className: 'map-summary' })}
+    ${map.nodes.map((node) => { const [x,y]=positionById.get(node.id); return `<g class="map-node" data-node-id="${node.id}" role="button" tabindex="0" aria-label="${esc(node.label)}"><rect x="${x-51}" y="${y-18}" width="102" height="36" rx="12"/>${textLines(node.label, x, y + 4, { width: 16 })}</g>`; }).join('')}
   </svg>`;
+}
+
+function bindConceptMap(map) {
+  const detail = document.querySelector('#visual-detail');
+  const selectNode = (nodeId) => {
+    const node = map.nodes.find((candidate) => candidate.id === nodeId);
+    if (!node) return;
+    const connected = connectedConcepts(map, nodeId);
+    const activeIds = new Set([nodeId, ...connected.neighbors.map((neighbor) => neighbor.id)]);
+    document.querySelectorAll('.map-node').forEach((element) => {
+      element.classList.toggle('active', element.dataset.nodeId === nodeId);
+      element.classList.toggle('dimmed', !activeIds.has(element.dataset.nodeId));
+    });
+    document.querySelectorAll('.concept-map path').forEach((edge) => {
+      const related = edge.dataset.from === nodeId || edge.dataset.to === nodeId;
+      edge.classList.toggle('active', related);
+      edge.classList.toggle('dimmed', !related);
+    });
+    const neighborCopy = connected.neighbors.length ? `Connected on this page: ${connected.neighbors.map((neighbor) => neighbor.label).join(', ')}.` : 'No direct co-occurrence was found with the other top concepts.';
+    const evidence = connected.relations[0]?.evidence || node.detail;
+    detail.innerHTML = `<b>${esc(node.label)}</b><p>${esc(evidence)}</p><small>${esc(neighborCopy)}</small>`;
+  };
+  document.querySelectorAll('.map-node').forEach((node) => {
+    node.addEventListener('click', () => selectNode(node.dataset.nodeId));
+    node.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); selectNode(node.dataset.nodeId); }
+    });
+  });
 }
 
 function downloadSvg(svg) {
@@ -747,6 +883,13 @@ function downloadSvg(svg) {
   link.download = 'prism-visual.svg';
   link.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function downloadDataUrl(dataUrl, mimeType) {
+  const link = document.createElement('a');
+  link.href = dataUrl;
+  link.download = `prism-figure.${mimeType === 'image/jpeg' ? 'jpg' : mimeType === 'image/webp' ? 'webp' : 'png'}`;
+  link.click();
 }
 
 async function showListen() {
@@ -838,7 +981,7 @@ function devShim() {
   globalThis.chrome = {
     tabs: { query: async () => [{ id: 1, url: 'https://example.edu/biology/photosynthesis', title: 'How photosynthesis works' }], create: ({ url }) => window.open(url, '_blank'), onActivated: { addListener() {} }, onUpdated: { addListener() {} } },
     scripting: { executeScript: async () => [{ result: { url: 'https://example.edu/biology/photosynthesis', title: 'How photosynthesis works', language: 'en', headings: ['How photosynthesis works', 'Light-dependent reactions', 'The Calvin cycle'] } }] },
-    storage: { session: { get: async () => ({}), set: async () => {}, remove: async () => {} }, local: { get: async () => ({}), set: async () => {} } },
+    storage: { session: { get: async () => ({}), set: async () => {}, remove: async () => {} }, local: { get: async () => ({ apiBaseUrl: location.origin }), set: async () => {} } },
     runtime: { id: '', sendMessage: async () => ({ source: { url: 'https://example.edu/biology/photosynthesis', title: 'How photosynthesis works', language: 'en', text, capturedAt: new Date().toISOString() } }) },
   };
   return true;

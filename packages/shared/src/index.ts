@@ -567,6 +567,20 @@ export interface LearningAsset {
   cached: boolean;
 }
 
+export interface FigureAsset {
+  id: string;
+  sourceId: string;
+  sourceTitle: string;
+  sourceUrl: string;
+  mimeType: 'image/png' | 'image/jpeg' | 'image/webp';
+  dataUrl: string;
+  altText: string;
+  model: string;
+  promptVersion: string;
+  createdAt: string;
+  cached: boolean;
+}
+
 // ---------------------------------------------------------------------------
 // Input sanitization (shared, deterministic)
 // ---------------------------------------------------------------------------
