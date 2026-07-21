@@ -1,32 +1,29 @@
-/**
- * Prism side panel.
- *
- * The workflow, in one screen:
- *   the page you're on  →  enters the prism as light  →  refracts into ways to learn it
- *
- * The page is read only on an explicit click (activeTab + scripting), never in
- * the background, and never from any tab but the one in front of you.
- */
+import { analyzeContent, createLocalQuiz } from './content-analysis.js';
 
 const BASE = 'http://localhost:8787';
 const app = document.querySelector('#app');
-
-/** Rohan's six-ray interface, with Joanne's generated assets behind four rays. */
 const WAYS = [
-  { id: 'quiz',    label: 'Quiz',      hint: 'You answer, you don’t skim',  color: 'var(--ray-1)', run: () => generateAsset('quiz', 'Quiz') },
-  { id: 'story',   label: 'Story',     hint: 'Hear it as a clear narrative', color: 'var(--ray-2)', run: () => generateAsset('listen', 'Story') },
-  { id: 'digest',  label: 'Digest',    hint: 'The part that actually matters',   color: 'var(--ray-3)', run: () => generateAsset('read', 'Digest') },
-  { id: 'numbers', label: 'Numbers',   hint: 'Trace the evidence and events',    color: 'var(--ray-4)', run: () => generateAsset('explore', 'Numbers') },
-  { id: 'growth',  label: 'Growth',    hint: 'Linear vs exponential, live',      color: 'var(--ray-5)', run: () => open('#core') },
-  { id: 'future',  label: 'Your future', hint: 'Goals, fees, time horizon',      color: 'var(--ray-6)', run: () => open('#future') },
+  { id: 'summarize', label: 'Summarize', hint: 'The page in a few clear points', color: 'var(--ray-1)', run: showSummary },
+  { id: 'quiz', label: 'Quiz me', hint: 'Answer first, then see why', color: 'var(--ray-2)', run: showQuiz },
+  { id: 'terms', label: 'Key terms', hint: 'The concepts that matter most', color: 'var(--ray-3)', run: showKeyTerms },
+  { id: 'visualize', label: 'Visualize', hint: 'One map of the whole idea', color: 'var(--ray-4)', run: showVisualize },
+  { id: 'listen', label: 'Listen', hint: 'Read aloud at your pace', color: 'var(--ray-5)', run: showListen },
 ];
+const RAY_Y = [30, 62, 94, 126, 158];
 
-const RAY_Y = [22, 50, 78, 106, 134, 162];
+let page = null;
+let pageSource = null;
+let analysis = null;
+let storedSourceId = null;
 
-let page = null;      // { url, host, title, restricted }
-let content = null;   // { headings, sentences, figures } — filled on demand
+function esc(value) {
+  return String(value ?? '').replace(/[&<>'"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[char]);
+}
 
-// ---------------------------------------------------------------- page access
+function truncate(value, limit) {
+  const text = String(value ?? '').trim();
+  return text.length > limit ? `${text.slice(0, limit - 1).trim()}…` : text;
+}
 
 async function activeTab() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -37,157 +34,19 @@ function isRestricted(url) {
   return !url || /^(chrome|edge|about|devtools|chrome-extension|moz-extension):/.test(url);
 }
 
-/**
- * Runs in the page. Pulls structure, not the whole DOM: headings, the first
- * sentence of substantial paragraphs, and any figures worth modelling.
- */
-function extractInPage() {
-  const clean = (s) => (s || '').replace(/\s+/g, ' ').trim();
-
-  const headings = [...document.querySelectorAll('h1,h2,h3')]
-    .map((h) => clean(h.textContent))
-    .filter((t) => t.length > 3 && t.length < 140)
-    .slice(0, 8);
-
-  const paras = [...document.querySelectorAll('article p, main p, p')]
-    .map((p) => clean(p.textContent))
-    .filter((t) => t.length > 90);
-
-  const sentences = paras
-    .slice(0, 14)
-    .map((t) => {
-      const m = t.match(/^.{40,190}?[.?!](\s|$)/);
-      return m ? m[0].trim() : t.slice(0, 170) + '…';
-    })
-    .slice(0, 6);
-
-  const body = paras.join(' ').slice(0, 20000);
-  const figures = [...new Set(
-    (body.match(/(?:\$\s?\d[\d,]*(?:\.\d+)?(?:\s?(?:billion|million|trillion|bn|m|k))?|\d+(?:\.\d+)?\s?%|\d+(?:\.\d+)?\s?(?:years|year|months))/gi) || [])
-      .map((s) => s.replace(/\s+/g, ' ').trim())
-  )].slice(0, 12);
-
-  return { headings, sentences, figures, wordCount: body.split(/\s+/).length };
-}
-
-async function readPage() {
+async function readPageMeta() {
   const tab = await activeTab();
-  if (!tab || isRestricted(tab.url)) {
-    return { restricted: true, url: tab?.url || '', title: tab?.title || '' };
-  }
-  const [res] = await chrome.scripting.executeScript({
+  if (!tab || isRestricted(tab.url)) return { restricted: true, url: tab?.url || '', title: tab?.title || '', headings: [] };
+  const [result] = await chrome.scripting.executeScript({
     target: { tabId: tab.id },
-    func: extractInPage,
+    func: () => ({
+      headings: [...document.querySelectorAll('h1,h2,h3')]
+        .map((heading) => (heading.textContent || '').replace(/\s+/g, ' ').trim())
+        .filter((heading) => heading.length > 3 && heading.length < 160)
+        .slice(0, 10),
+    }),
   });
-  return { ...res.result, url: tab.url, title: tab.title, restricted: false };
-}
-
-// ---------------------------------------------------------------- rendering
-
-function esc(s) {
-  return String(s).replace(/[&<>'"]/g, (c) =>
-    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[c]));
-}
-
-function prismSvg() {
-  const rays = WAYS.map((w, i) =>
-    `<path class="ray" data-ray="${w.id}" stroke="${w.color}" d="M 140 96 L 306 ${RAY_Y[i]}"/>`
-  ).join('');
-  return `
-  <svg class="scene" viewBox="0 0 320 190" role="img"
-       aria-label="The current page entering a prism and refracting into six ways to learn it.">
-    <path class="in"    d="M 12 92 L 105 92"/>
-    <path class="spark" d="M 12 92 L 105 92"/>
-    <path class="side" d="M 122 38 L 136 30 L 168 132 L 154 140 Z"/>
-    <path class="base" d="M 90 140 L 104 132 L 168 132 L 154 140 Z"/>
-    <path class="face" d="M 122 38 L 154 140 L 90 140 Z"/>
-    <path class="internal" d="M 105 92 L 140 96"/>
-    ${rays}
-  </svg>`;
-}
-
-function sourceBlock() {
-  const host = page.restricted ? 'this page is protected' : new URL(page.url).hostname.replace(/^www\./, '');
-  return `
-    <p class="eyebrow">The page you're on</p>
-    <div class="source"><span class="dot"></span><span class="url">${esc(host)}</span></div>
-    <p class="subtle">${esc(page.title || '')}</p>`;
-}
-
-function waysBlock() {
-  return `<div class="ways">${WAYS.map((w) => `
-    <button class="way" data-way="${w.id}" ${w.run ? '' : 'disabled'}>
-      <span class="bar" style="background:${w.color}"></span>
-      <span class="txt"><b>${esc(w.label)}</b><span>${esc(w.hint)}</span></span>
-      ${w.run ? '' : '<span class="next">next</span>'}
-    </button>`).join('')}</div>`;
-}
-
-function renderHome() {
-  if (page.restricted) {
-    app.innerHTML = `
-      ${sourceBlock()}
-      <div class="out"><p class="err">Prism can't read browser-protected pages.
-      Open an article or a problem set and try again.</p></div>`;
-    return;
-  }
-  app.innerHTML = `
-    ${sourceBlock()}
-    ${prismSvg()}
-    <p class="eyebrow">Ways back out</p>
-    ${waysBlock()}
-    <button class="back" id="open-library">Open source library ↗</button>
-    <p class="note">Prism reads this page only when you pick a way, and never any other tab.</p>`;
-  bindWays();
-  document.querySelector('#open-library')?.addEventListener('click', () => open('#library'));
-}
-
-function bindWays() {
-  document.querySelectorAll('[data-way]').forEach((btn) => {
-    const way = WAYS.find((w) => w.id === btn.dataset.way);
-    if (!way?.run) return;
-    btn.addEventListener('mouseenter', () => highlightRay(way.id));
-    btn.addEventListener('mouseleave', () => highlightRay(null));
-    btn.addEventListener('focus', () => highlightRay(way.id));
-    btn.addEventListener('blur', () => highlightRay(null));
-    btn.addEventListener('click', () => way.run());
-  });
-}
-
-function highlightRay(id) {
-  document.querySelectorAll('[data-ray]').forEach((r) => {
-    r.classList.toggle('on', id !== null && r.dataset.ray === id);
-    r.classList.toggle('dim', id !== null && r.dataset.ray !== id);
-  });
-}
-
-function backButton() {
-  const b = document.createElement('button');
-  b.className = 'back';
-  b.textContent = '← Back to the prism';
-  b.onclick = renderHome;
-  return b;
-}
-
-async function ensureContent() {
-  if (!content) content = await readPage();
-  return content;
-}
-
-// ---------------------------------------------------------------- the ways
-
-async function generateAsset(kind, label) {
-  app.innerHTML = `${sourceBlock()}<p class="spin">Preparing ${esc(label)}…</p>`;
-  try {
-    const captured = await captureSource();
-    const saved = await post('/api/sources/capture', { sources: [captured] });
-    const source = saved.sources?.[0];
-    if (!source?.id) throw new Error('Prism could not save this page.');
-    const asset = await post(`/api/sources/${encodeURIComponent(source.id)}/assets/${kind}`, {});
-    renderAsset(label, asset);
-  } catch (error) {
-    renderGenerationError(error?.message || 'Prism could not create this learning material.');
-  }
+  return { ...result.result, restricted: false, url: tab.url, title: tab.title || '' };
 }
 
 async function captureSource() {
@@ -201,11 +60,30 @@ async function captureSource() {
       capturedAt: new Date(selected.capturedAt || Date.now()).toISOString(),
     };
   }
-
   const result = await chrome.runtime.sendMessage({ type: 'capture-active-tab' });
   if (result?.error) throw new Error(result.error);
-  if (!result?.source) throw new Error('Prism could not capture the active page.');
+  if (!result?.source) throw new Error('Prism could not capture this page.');
   return result.source;
+}
+
+async function ensureSource() {
+  if (!pageSource) pageSource = await captureSource();
+  if (!analysis) analysis = analyzeContent(pageSource.text, { headings: page?.headings || [] });
+  return pageSource;
+}
+
+async function ensureStoredSource() {
+  const source = await ensureSource();
+  if (storedSourceId) return storedSourceId;
+  const saved = await post('/api/sources/capture', { sources: [source] });
+  storedSourceId = saved.sources?.[0]?.id;
+  if (!storedSourceId) throw new Error('Prism could not save this page.');
+  return storedSourceId;
+}
+
+async function requestGeneratedAsset(kind) {
+  const sourceId = await ensureStoredSource();
+  return post(`/api/sources/${encodeURIComponent(sourceId)}/assets/${kind}`, {});
 }
 
 async function post(path, body) {
@@ -219,156 +97,253 @@ async function post(path, body) {
   return data;
 }
 
-function renderAsset(label, asset) {
-  app.innerHTML = `
-    ${sourceBlock()}
-    <p class="eyebrow">${asset.cached ? 'Saved result' : 'Generated now'} · ${esc(label)}</p>
-    <div class="out">${assetHtml(asset.kind, asset.payload)}</div>
-    <p class="note">${asset.cached
-      ? 'Prism reused the saved result instead of making another generation request.'
-      : 'Only this learning material was generated and saved.'}</p>`;
-  bindAssetControls(asset.kind, asset.payload);
+function prismSvg() {
+  const rays = WAYS.map((way, index) => `<path class="ray" data-ray="${way.id}" stroke="${way.color}" d="M 140 96 L 306 ${RAY_Y[index]}"/>`).join('');
+  return `<svg class="scene" viewBox="0 0 320 190" role="img" aria-label="The current page entering a prism and refracting into five ways to learn it.">
+    <path class="in" d="M 12 92 L 105 92"/><path class="spark" d="M 12 92 L 105 92"/>
+    <path class="side" d="M 122 38 L 136 30 L 168 132 L 154 140 Z"/>
+    <path class="base" d="M 90 140 L 104 132 L 168 132 L 154 140 Z"/>
+    <path class="face" d="M 122 38 L 154 140 L 90 140 Z"/><path class="internal" d="M 105 92 L 140 96"/>${rays}</svg>`;
+}
+
+function sourceBlock() {
+  const host = page?.restricted ? 'this page is protected' : safeHost(page?.url);
+  return `<p class="eyebrow">The page you're on</p>
+    <div class="source"><span class="dot"></span><span class="url">${esc(host)}</span></div>
+    <p class="subtle">${esc(page?.title || pageSource?.title || '')}</p>`;
+}
+
+function safeHost(url) {
+  try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return 'web page'; }
+}
+
+function renderHome() {
+  speechSynthesis?.cancel?.();
+  if (page?.restricted) {
+    app.innerHTML = `${sourceBlock()}<div class="out"><p class="err">Prism cannot read this browser-protected page. Open an article or assignment and try again.</p></div>`;
+    return;
+  }
+  const readiness = analysis ? `${analysis.wordCount.toLocaleString()} words analyzed` : 'Ready to analyze';
+  app.innerHTML = `${sourceBlock()}${prismSvg()}<div class="ready"><span></span>${esc(readiness)}</div>
+    <p class="eyebrow">Choose a learning mode</p>
+    <div class="ways">${WAYS.map((way) => `<button class="way" data-way="${way.id}"><span class="bar" style="background:${way.color}"></span><span class="txt"><b>${esc(way.label)}</b><span>${esc(way.hint)}</span></span></button>`).join('')}</div>
+    <p class="note">Only this active page or the text you selected is analyzed.</p>`;
+  bindWays();
+}
+
+function bindWays() {
+  document.querySelectorAll('[data-way]').forEach((button) => {
+    const way = WAYS.find((candidate) => candidate.id === button.dataset.way);
+    button.addEventListener('mouseenter', () => highlightRay(way.id));
+    button.addEventListener('mouseleave', () => highlightRay(null));
+    button.addEventListener('focus', () => highlightRay(way.id));
+    button.addEventListener('blur', () => highlightRay(null));
+    button.addEventListener('click', () => void way.run());
+  });
+}
+
+function highlightRay(id) {
+  document.querySelectorAll('[data-ray]').forEach((ray) => {
+    ray.classList.toggle('on', id !== null && ray.dataset.ray === id);
+    ray.classList.toggle('dim', id !== null && ray.dataset.ray !== id);
+  });
+}
+
+function renderLoading(label) {
+  app.innerHTML = `${sourceBlock()}<div class="loading"><i></i><p>${esc(label)}</p></div>`;
+}
+
+function finishResult(html, note = '') {
+  app.innerHTML = `${sourceBlock()}<div class="out">${html}</div>${note ? `<p class="note">${esc(note)}</p>` : ''}`;
   app.append(backButton());
 }
 
-function assetHtml(kind, data) {
-  if (kind === 'read') {
-    return `<h3>The part that actually matters</h3>${(data.segments || []).map((segment) => `
-      <p>${esc(segment.text)}</p>
-      <p class="recap"><strong>Recap:</strong> ${esc(segment.recap)}</p>
-      ${(segment.glosses || []).map((gloss) => `<p class="gloss"><strong>${esc(gloss.term)}</strong> — ${esc(gloss.definition)}</p>`).join('')}
-    `).join('')}`;
-  }
-  if (kind === 'listen') {
-    return `<h3>Story</h3><p>${esc(data.script)}</p><button class="fig" id="play-story">▶ Listen</button>`;
-  }
-  if (kind === 'explore') {
-    const timeline = (data.timeline || []).sort((a, b) => a.order - b.order)
-      .map((item) => `<p><strong>${esc(item.label)}</strong><br>${esc(item.detail)}</p>`).join('');
-    const chart = data.data
-      ? `<p><strong>${esc(data.data.caption)}</strong></p>${data.data.series.map((series) => `<p>${esc(series.name)}: ${series.points.map((point) => `${esc(point.x)} → ${esc(point.y)}`).join(', ')}</p>`).join('')}`
-      : '';
-    return `<h3>Evidence on this page</h3>${timeline || chart ? timeline + chart : '<p>No source-supported timeline or comparable figures were available.</p>'}`;
-  }
-  if (kind === 'watch') {
-    return `<h3>Watch</h3><p>${esc(data.altText)}</p>${(data.steps || []).map((step) => `<p><strong>${esc(step.caption)}</strong><br>${esc(step.description)}</p>`).join('')}`;
-  }
-  return `<h3>Quiz</h3>${(data.items || []).map((item) => `
-    <details><summary>${esc(item.stem)}</summary>
-      ${(item.options || []).map((option) => `<p class="${option.correct ? 'correct' : ''}"><strong>${esc(option.text)}</strong> — ${esc(option.feedback)}</p>`).join('')}
-      <p>${esc(item.explanation)}</p>
-    </details>`).join('')}`;
+function backButton() {
+  const button = document.createElement('button');
+  button.className = 'back';
+  button.textContent = '← Back to the five modes';
+  button.onclick = renderHome;
+  return button;
 }
 
-function bindAssetControls(kind, data) {
-  if (kind !== 'listen') return;
-  document.querySelector('#play-story')?.addEventListener('click', () => {
+async function showSummary() {
+  renderLoading('Finding the signal…');
+  await ensureSource();
+  let points = analysis.summary;
+  let source = 'Instant extractive summary';
+  try {
+    const asset = await requestGeneratedAsset('read');
+    points = asset.payload.segments.map((segment) => segment.recap || segment.text);
+    source = asset.cached ? 'Saved AI-refined summary' : 'AI-refined summary';
+  } catch { /* The local summary is the zero-key, offline-safe path. */ }
+  finishResult(`<div class="result-head"><span>Summarize</span><small>${esc(source)}</small></div>
+    <h3>${esc(pageSource.title)}</h3><div class="summary-points">${points.map((point, index) => `<p data-summary="${index}"><b>${index + 1}</b>${esc(point)}</p>`).join('')}</div>
+    <div class="segmented" role="group" aria-label="Summary length"><button data-length="2">Short</button><button class="active" data-length="4">Standard</button><button data-length="99">All</button></div>`, `${analysis.wordCount.toLocaleString()} source words distilled into ${points.length} points.`);
+  document.querySelectorAll('[data-length]').forEach((button) => button.addEventListener('click', () => {
+    const limit = Number(button.dataset.length);
+    document.querySelectorAll('[data-summary]').forEach((point) => { point.hidden = Number(point.dataset.summary) >= limit; });
+    document.querySelectorAll('[data-length]').forEach((candidate) => candidate.classList.toggle('active', candidate === button));
+  }));
+}
+
+async function showQuiz() {
+  renderLoading('Building questions from this page…');
+  await ensureSource();
+  let items = createLocalQuiz(pageSource.text, { headings: page.headings, limit: 5 });
+  let source = 'Instant source-based quiz';
+  try {
+    const asset = await requestGeneratedAsset('quiz');
+    items = asset.payload.items;
+    source = asset.cached ? 'Saved AI-refined quiz' : 'AI-refined quiz';
+  } catch { /* Keep the deterministic quiz. */ }
+  if (!items.length) return finishResult('<h3>Quiz me</h3><p>Prism needs a little more readable text to build questions.</p>');
+  finishResult(`<div class="result-head"><span>Quiz me</span><small>${esc(source)}</small></div><div class="quiz-list">${items.map((item, questionIndex) => `
+    <section class="quiz-item" data-question="${questionIndex}"><p class="question-count">${questionIndex + 1} / ${items.length}</p><h3>${esc(item.stem)}</h3>
+      <div class="quiz-options">${item.options.map((option, optionIndex) => `<button data-option="${optionIndex}" data-correct="${option.correct}">${esc(option.text)}</button>`).join('')}</div>
+      <div class="quiz-feedback" hidden></div><p class="quiz-explanation" hidden>${esc(item.explanation)}</p></section>`).join('')}</div>`, 'Answers and explanations stay hidden until you attempt each question.');
+  document.querySelectorAll('.quiz-item').forEach((card) => {
+    card.querySelectorAll('[data-option]').forEach((button) => button.addEventListener('click', () => {
+      if (card.dataset.answered) return;
+      card.dataset.answered = 'true';
+      const item = items[Number(card.dataset.question)];
+      const option = item.options[Number(button.dataset.option)];
+      card.querySelectorAll('[data-option]').forEach((candidate) => {
+        candidate.disabled = true;
+        if (candidate.dataset.correct === 'true') candidate.classList.add('correct');
+      });
+      button.classList.add(option.correct ? 'correct' : 'wrong');
+      const feedback = card.querySelector('.quiz-feedback');
+      feedback.hidden = false;
+      feedback.textContent = option.feedback;
+      card.querySelector('.quiz-explanation').hidden = false;
+    }));
+  });
+}
+
+async function showKeyTerms() {
+  renderLoading('Filtering noise and ranking concepts…');
+  await ensureSource();
+  const terms = analysis.keyTerms;
+  finishResult(`<div class="result-head"><span>Key terms</span><small>Frequency + relevance</small></div>
+    <h3>${terms.length ? 'What this page keeps coming back to' : 'Not enough terms yet'}</h3>
+    <div class="term-grid">${terms.map((term, index) => `<button class="term" data-term="${index}"><span>${esc(term.term)}</span><b>${term.count}×</b></button>`).join('')}</div>
+    <div class="term-context" id="term-context">Choose a term to see it in context.</div>`, 'Common filler and interface words are removed; repeated phrases and heading terms rank higher.');
+  document.querySelectorAll('[data-term]').forEach((button) => button.addEventListener('click', () => {
+    const term = terms[Number(button.dataset.term)];
+    document.querySelectorAll('[data-term]').forEach((candidate) => candidate.classList.toggle('active', candidate === button));
+    document.querySelector('#term-context').innerHTML = `<b>${esc(term.term)}</b><p>${esc(term.contexts[0] || 'No additional context found.')}</p>`;
+  }));
+}
+
+async function showVisualize() {
+  renderLoading('Drawing the relationships…');
+  await ensureSource();
+  let nodes = analysis.keyTerms.slice(0, 6).map((term) => ({ label: term.term, detail: term.contexts[0] || '' }));
+  let source = 'Generated locally from ranked concepts';
+  try {
+    const asset = await requestGeneratedAsset('watch');
+    nodes = asset.payload.steps.slice(0, 6).map((step) => ({ label: step.caption, detail: step.description }));
+    source = asset.cached ? 'Saved AI-refined visual plan' : 'AI-refined visual plan';
+  } catch { /* The deterministic concept map remains available. */ }
+  const svg = conceptMapSvg(pageSource.title, nodes);
+  finishResult(`<div class="result-head"><span>Visualize</span><small>${esc(source)}</small></div>${svg}
+    <p class="visual-caption">${esc(analysis.summary[0] || pageSource.title)}</p><button class="fig" id="download-visual">Download SVG</button>`, 'One coherent concept map is created from this page—not a generic stock image.');
+  document.querySelector('#download-visual')?.addEventListener('click', () => downloadSvg(document.querySelector('.concept-map').outerHTML));
+}
+
+function conceptMapSvg(title, nodes) {
+  const positions = [[160,38],[258,82],[250,172],[160,212],[70,172],[62,82]];
+  const safeNodes = nodes.length ? nodes : [{ label: 'Main idea', detail: '' }];
+  return `<svg class="concept-map" viewBox="0 0 320 250" role="img" aria-label="Concept map for ${esc(title)}">
+    <defs><linearGradient id="map-center" x1="0" x2="1"><stop stop-color="#ff9f45"/><stop offset="1" stop-color="#a06bff"/></linearGradient></defs>
+    ${safeNodes.map((node, index) => `<path d="M160 125 L${positions[index % positions.length][0]} ${positions[index % positions.length][1]}"/>`).join('')}
+    <rect class="map-center" x="93" y="96" width="134" height="58" rx="16"/><text class="map-title" x="160" y="121">${esc(truncate(title, 26))}</text><text class="map-title small" x="160" y="139">${esc(truncate(analysis.summary[0] || 'Main idea', 38))}</text>
+    ${safeNodes.map((node, index) => { const [x,y]=positions[index % positions.length]; return `<g><rect x="${x-51}" y="${y-18}" width="102" height="36" rx="12"/><text x="${x}" y="${y+4}">${esc(truncate(node.label, 18))}</text></g>`; }).join('')}
+  </svg>`;
+}
+
+function downloadSvg(svg) {
+  const url = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }));
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = 'prism-visual.svg';
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+async function showListen() {
+  renderLoading('Preparing the reader…');
+  await ensureSource();
+  let narrated = analysis.summary.join(' ');
+  let source = 'Browser voice · no API key';
+  try {
+    const asset = await requestGeneratedAsset('listen');
+    narrated = asset.payload.script;
+    source = asset.cached ? 'Saved AI-refined narration' : 'AI-refined narration';
+  } catch { /* Browser speech still reads the source. */ }
+  finishResult(`<div class="result-head"><span>Listen</span><small>${esc(source)}</small></div><h3>${esc(pageSource.title)}</h3>
+    <div class="listen-controls"><label>Read<select id="listen-scope"><option value="summary">Summary</option><option value="article">Full page</option><option value="narration">Narration</option></select></label>
+      <label>Speed<select id="listen-rate"><option value="0.75">0.75×</option><option value="1" selected>1×</option><option value="1.25">1.25×</option><option value="1.5">1.5×</option><option value="2">2×</option></select></label>
+      <label>Voice<select id="listen-voice"></select></label></div>
+    <div class="transport"><button class="fig" id="listen-play">▶ Play</button><button class="fig" id="listen-pause">Ⅱ Pause</button><button class="fig" id="listen-stop">■ Stop</button></div>
+    <p class="voice-status" id="voice-status">Ready.</p>`, 'Playback stays on your device. Translation is the next language feature, not included in this build.');
+  bindSpeech({ summary: analysis.summary.join(' '), article: pageSource.text, narration: narrated });
+}
+
+function bindSpeech(copy) {
+  const voiceSelect = document.querySelector('#listen-voice');
+  const loadVoices = () => {
+    const voices = speechSynthesis.getVoices();
+    voiceSelect.innerHTML = voices.map((voice, index) => `<option value="${index}">${esc(voice.name)} · ${esc(voice.lang)}</option>`).join('');
+  };
+  loadVoices();
+  speechSynthesis.addEventListener?.('voiceschanged', loadVoices, { once: true });
+  document.querySelector('#listen-play').onclick = () => {
     speechSynthesis.cancel();
-    speechSynthesis.speak(new SpeechSynthesisUtterance(data.script));
-  });
+    const scope = document.querySelector('#listen-scope').value;
+    const utterance = new SpeechSynthesisUtterance(copy[scope]);
+    utterance.rate = Number(document.querySelector('#listen-rate').value);
+    const voices = speechSynthesis.getVoices();
+    utterance.voice = voices[Number(voiceSelect.value)] || null;
+    utterance.onstart = () => { document.querySelector('#voice-status').textContent = 'Playing…'; };
+    utterance.onend = () => { document.querySelector('#voice-status').textContent = 'Finished.'; };
+    speechSynthesis.speak(utterance);
+  };
+  document.querySelector('#listen-pause').onclick = () => {
+    if (speechSynthesis.paused) { speechSynthesis.resume(); document.querySelector('#voice-status').textContent = 'Playing…'; }
+    else { speechSynthesis.pause(); document.querySelector('#voice-status').textContent = 'Paused.'; }
+  };
+  document.querySelector('#listen-stop').onclick = () => { speechSynthesis.cancel(); document.querySelector('#voice-status').textContent = 'Stopped.'; };
 }
 
-function renderGenerationError(message) {
-  app.innerHTML = `${sourceBlock()}<div class="out"><p class="err">${esc(message)}</p></div>`;
-  app.append(backButton());
-}
-
-async function showDigest() {
-  app.innerHTML = `${sourceBlock()}<p class="spin">Reading…</p>`;
-  const c = await ensureContent();
-  const items = (c.sentences || []);
-  app.innerHTML = `
-    ${sourceBlock()}
-    <div class="out">
-      <h3>The part that actually matters</h3>
-      ${items.length
-        ? `<ul>${items.map((s) => `<li>${esc(s)}</li>`).join('')}</ul>`
-        : `<p class="err">Couldn't find enough article text on this page.</p>`}
-      ${c.headings?.length ? `<p class="note">Sections: ${esc(c.headings.slice(0, 4).join(' · '))}</p>` : ''}
-      ${c.wordCount ? `<p class="note">${c.wordCount.toLocaleString()} words on the page.</p>` : ''}
-    </div>`;
-  app.append(backButton());
-}
-
-async function showNumbers() {
-  app.innerHTML = `${sourceBlock()}<p class="spin">Reading…</p>`;
-  const c = await ensureContent();
-  const figs = c.figures || [];
-  app.innerHTML = `
-    ${sourceBlock()}
-    <div class="out">
-      <h3>Numbers on this page</h3>
-      ${figs.length
-        ? `<div class="figs">${figs.map((f) => `<button class="fig" data-fig="${esc(f)}">${esc(f)}</button>`).join('')}</div>
-           <p class="note">Pick a rate or an amount to model it in Prism.</p>`
-        : `<p class="err">No figures found on this page.</p>`}
-    </div>`;
-  document.querySelectorAll('[data-fig]').forEach((b) => {
-    b.onclick = () => {
-      const raw = b.dataset.fig;
-      const pct = /%/.test(raw);
-      const n = parseFloat(raw.replace(/[^0-9.]/g, ''));
-      // A rate drives the growth lesson; an amount drives the projection.
-      open(pct ? `#core?rate=${n}` : `#future?amount=${n}`);
-    };
-  });
-  app.append(backButton());
-}
-
-function open(hash) {
-  chrome.tabs.create({ url: `${BASE}/${hash}` });
-}
-
-// ---------------------------------------------------------------- boot
-
-/**
- * Dev preview: opening sidepanel.html straight in a browser has no chrome.*
- * APIs. Stub just enough to iterate on the panel's design without reloading
- * the unpacked extension each time. Never runs inside Chrome as an extension.
- */
 function devShim() {
-  if (typeof chrome !== 'undefined' && chrome.tabs) return false;
+  if (typeof chrome !== 'undefined' && chrome.runtime?.id) return false;
+  const text = `Compound interest grows money by earning returns on both the original balance and earlier returns. Compound interest becomes more powerful over long periods. Investors often use diversified index funds for long-term investing. An index fund may hold many companies, which can reduce company-specific risk. Diversified index funds still carry market risk. Starting early gives compound interest more time to work. Small regular contributions can meaningfully affect a long-term balance.`;
   globalThis.chrome = {
-    tabs: {
-      query: async () => [{ id: 1, url: 'https://www.wsj.com/finance/rate-cuts', title: 'What falling rates mean for your savings' }],
-      create: ({ url }) => window.open(url, '_blank'),
-      onActivated: { addListener() {} },
-      onUpdated: { addListener() {} },
-    },
-    scripting: {
-      executeScript: async () => [{ result: {
-        headings: ['What changed', 'Why bond prices move', 'What it means for savers'],
-        sentences: [
-          'The Federal Reserve cut its benchmark rate by a quarter point, the third reduction this year.',
-          'When rates fall, previously issued bonds paying higher coupons become more valuable.',
-          'Savers holding cash see yields on money-market funds drift down within weeks.',
-        ],
-        figures: ['0.25 %', '$1.2 trillion', '4.5 %', '10 years', '$500'],
-        wordCount: 1840,
-      } }],
-    },
+    tabs: { query: async () => [{ id: 1, url: 'https://www.wsj.com/finance/compound-interest', title: 'How compound interest changes long-term investing' }], create: ({ url }) => window.open(url, '_blank'), onActivated: { addListener() {} }, onUpdated: { addListener() {} } },
+    scripting: { executeScript: async () => [{ result: { headings: ['How compound interest works', 'Why starting early matters', 'Index funds and risk'] } }] },
     storage: { session: { get: async () => ({}), set: async () => {}, remove: async () => {} } },
-    runtime: {
-      id: '',
-      sendMessage: async () => ({ source: {
-        url: 'https://www.wsj.com/finance/rate-cuts',
-        title: 'What falling rates mean for your savings',
-        text: 'The Federal Reserve cut its benchmark rate. Bond prices and savings yields respond differently as rates change.',
-        capturedAt: new Date().toISOString(),
-      } }),
-    },
+    runtime: { id: '', sendMessage: async () => ({ source: { url: 'https://www.wsj.com/finance/compound-interest', title: 'How compound interest changes long-term investing', text, capturedAt: new Date().toISOString() } }) },
   };
   return true;
 }
 
 async function boot() {
-  page = await readPage();
-  content = page.restricted ? null : page;
+  speechSynthesis?.cancel?.();
+  storedSourceId = null;
+  pageSource = null;
+  analysis = null;
+  page = await readPageMeta();
+  if (page.restricted) return renderHome();
+  app.innerHTML = `${sourceBlock()}<div class="loading"><i></i><p>Analyzing this page…</p></div>`;
+  try { await ensureSource(); } catch (error) {
+    app.innerHTML = `${sourceBlock()}<div class="out"><p class="err">${esc(error?.message || 'Prism could not read this page.')}</p></div>`;
+    return;
+  }
   renderHome();
 }
 
 devShim();
-
-boot();
-chrome.tabs.onActivated.addListener(boot);
-chrome.tabs.onUpdated.addListener((_id, info) => { if (info.status === 'complete') boot(); });
+void boot();
+chrome.tabs.onActivated.addListener(() => void boot());
+chrome.tabs.onUpdated.addListener((_id, info) => { if (info.status === 'complete') void boot(); });

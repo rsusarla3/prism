@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Prism",
-  "version": "0.2.0",
-  "description": "Point Prism at the page you're on and turn it into learning materials.",
+  "version": "0.3.0",
+  "description": "Summarize, quiz, visualize, hear, and find key terms on the page you're viewing.",
   "permissions": ["sidePanel", "storage", "contextMenus", "activeTab", "scripting"],
   "host_permissions": ["http://localhost:8787/*"],
   "background": { "service_worker": "background.js", "type": "module" },

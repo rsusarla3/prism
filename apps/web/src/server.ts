@@ -245,7 +245,7 @@ async function serveStatic(res: http.ServerResponse, urlPath: string) {
   }
 }
 
-async function serveExtensionDev(res: http.ServerResponse, filename: 'sidepanel.html' | 'sidepanel.js') {
+async function serveExtensionDev(res: http.ServerResponse, filename: 'sidepanel.html' | 'sidepanel.js' | 'content-analysis.js') {
   const body = await readFile(path.join(EXTENSION_DIR, filename));
   res.writeHead(200, { 'content-type': filename.endsWith('.html') ? 'text/html; charset=utf-8' : 'text/javascript; charset=utf-8' });
   res.end(body);
@@ -272,6 +272,9 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'GET' && url.pathname === '/extension-dev/sidepanel.js') {
       return serveExtensionDev(res, 'sidepanel.js');
+    }
+    if (req.method === 'GET' && url.pathname === '/extension-dev/content-analysis.js') {
+      return serveExtensionDev(res, 'content-analysis.js');
     }
     if (req.method === 'GET' && url.pathname === '/api/health') {
       return send(res, 200, { ok: true });
