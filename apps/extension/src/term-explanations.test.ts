@@ -25,4 +25,3 @@ describe('term explanations', () => {
     expect(result.definition).toMatch(/original amount/i);
   });
 });
-
