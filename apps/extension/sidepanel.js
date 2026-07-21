@@ -45,18 +45,34 @@ function isRestricted(url) {
 
 async function readPageMeta() {
   const tab = await activeTab();
-  if (!tab || isRestricted(tab.url)) return { restricted: true, url: tab?.url || '', title: tab?.title || '', headings: [] };
-  const [result] = await chrome.scripting.executeScript({
-    target: { tabId: tab.id },
-    func: () => ({
-      language: document.documentElement.lang || navigator.language || '',
-      headings: [...document.querySelectorAll('h1,h2,h3')]
-        .map((heading) => (heading.textContent || '').replace(/\s+/g, ' ').trim())
-        .filter((heading) => heading.length > 3 && heading.length < 160)
-        .slice(0, 10),
-    }),
-  });
-  return { ...result.result, restricted: false, url: tab.url, title: tab.title || '' };
+  if (!tab?.id) return { restricted: true, url: '', title: '', headings: [] };
+  if (tab.url && isRestricted(tab.url)) return { restricted: true, url: tab.url, title: tab.title || '', headings: [] };
+  try {
+    const [result] = await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      func: () => ({
+        url: location.href,
+        title: document.title,
+        language: document.documentElement.lang || navigator.language || '',
+        headings: [...document.querySelectorAll('h1,h2,h3')]
+          .map((heading) => (heading.textContent || '').replace(/\s+/g, ' ').trim())
+          .filter((heading) => heading.length > 3 && heading.length < 160)
+          .slice(0, 10),
+      }),
+    });
+    const meta = result?.result;
+    if (!meta?.url || isRestricted(meta.url)) return { restricted: true, url: meta?.url || tab.url || '', title: meta?.title || tab.title || '', headings: [] };
+    return { ...meta, restricted: false };
+  } catch (error) {
+    return {
+      restricted: false,
+      accessError: true,
+      url: tab.url || '',
+      title: tab.title || '',
+      headings: [],
+      message: error?.message || 'Chrome did not grant access to this page.',
+    };
+  }
 }
 
 async function captureSource() {
@@ -169,6 +185,10 @@ function renderHome() {
   speechSynthesis?.cancel?.();
   if (page?.restricted) {
     app.innerHTML = `${sourceBlock()}<div class="out"><p class="err">Prism cannot read this browser-protected page. Open an article or assignment and try again.</p></div>`;
+    return;
+  }
+  if (page?.accessError) {
+    app.innerHTML = `${sourceBlock()}<div class="out"><p class="err">Chrome has not granted Prism access to this tab. Reload the page, then click the Prism toolbar icon while this tab is active.</p><p class="note">${esc(page.message || '')}</p></div>`;
     return;
   }
   const readiness = analysis ? `${analysis.wordCount.toLocaleString()} words analyzed` : 'Ready to analyze';
@@ -406,7 +426,7 @@ async function boot() {
   outputLanguage = OUTPUT_LANGUAGES.some(([value]) => value === settings.outputLanguage) ? settings.outputLanguage : 'source';
   apiBase = settings.apiBaseUrl ? normalizeApiBase(settings.apiBaseUrl) : DEFAULT_API_BASE;
   page = await readPageMeta();
-  if (page.restricted) return renderHome();
+  if (page.restricted || page.accessError) return renderHome();
   app.innerHTML = `${sourceBlock()}<div class="loading"><i></i><p>Analyzing this page…</p></div>`;
   try { await ensureSource(); } catch (error) {
     app.innerHTML = `${sourceBlock()}<div class="out"><p class="err">${esc(error?.message || 'Prism could not read this page.')}</p></div>`;
