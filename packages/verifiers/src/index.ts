@@ -6,6 +6,57 @@
 
 export { parseLinear, solveLinear, verifyLinearSolution } from './linear.js';
 export { compoundGrowth, verifyCompoundGuess, round2 } from './finance.js';
+export { compareGrowth, verifyGrowthPrediction } from './growth.js';
+export { futureValueWithContributions, projectInvestment, compareInvestmentScenarios, verifyInvestmentGuess } from './invest.js';
+
+import type { AssetClassInfo } from 'prism-shared';
+
+/** Basic descriptions of ETFs, individual stocks, and bonds (Prism Future). */
+export const ASSET_CLASSES: AssetClassInfo[] = [
+  {
+    id: 'etf',
+    title: 'ETFs (Exchange-Traded Funds)',
+    description:
+      'A single ETF share represents ownership of many underlying securities. Broad ETFs diversify across companies, so one company failing barely moves the fund. You pay an expense ratio (a small annual fee), not a purchase commission.',
+  },
+  {
+    id: 'stock',
+    title: 'Individual Stocks',
+    description:
+      'Buying a share makes you a part-owner of one company. Returns can be high but risk is concentrated: a single bad quarter can cut the value sharply. Most retail investors hold stocks inside a diversified fund rather than alone.',
+  },
+  {
+    id: 'bond',
+    title: 'Bonds',
+    description:
+      'A bond is a loan you make to a government or company that pays periodic interest and returns principal at maturity. Generally lower risk and lower expected return than stocks, which is why bonds are often used to steady a portfolio.',
+  },
+];
+
+/** Suggested onboarding keywords for Prism Future (user may also add custom). */
+export const SUGGESTED_KEYWORDS: string[] = [
+  'retirement',
+  'buy a home',
+  'emergency fund',
+  'kid’s education',
+  'travel fund',
+  'pay off debt',
+  'financial independence',
+];
+
+export const FUTURE_GOALS = [
+  { id: 'peace', label: 'Peace of mind', category: 'security' },
+  { id: 'cushion', label: 'Emergency cushion', category: 'security' },
+  { id: 'retire', label: 'Earlier retirement', category: 'freedom' },
+  { id: 'career', label: 'Career flexibility', category: 'freedom' },
+  { id: 'time', label: 'More free time', category: 'freedom' },
+  { id: 'travel', label: 'Travel', category: 'lifestyle' },
+  { id: 'home', label: 'A comfortable home', category: 'lifestyle' },
+  { id: 'parents', label: 'Support parents', category: 'family' },
+  { id: 'education', label: 'Education fund', category: 'family' },
+  { id: 'business', label: 'Start a business', category: 'achievement' },
+  { id: 'independence', label: 'Financial independence', category: 'achievement' },
+] as const;
 
 import { verifyLinearSolution } from './linear.js';
 import { verifyCompoundGuess } from './finance.js';
@@ -31,8 +82,8 @@ export function verifyAttempt(
           : {
               correct: false,
               reason: r.solution === null
-                ? 'This equation has no unique solution.'
-                : `Not quite. The correct solution is x = ${r.solution}.`,
+                ? 'The equation does not have one unique numeric solution.'
+                : 'That value does not satisfy both sides. Substitute it into the original equation and compare the two sides.',
             };
       }
       case 'numeric': {
@@ -42,7 +93,7 @@ export function verifyAttempt(
         const r = verifyCompoundGuess(context.profile, Number(attempt.value));
         return r.correct
           ? { correct: true, reason: 'Within tolerance of the projected balance.' }
-          : { correct: false, reason: `Close, but the projected balance is ${r.expected}.` };
+          : { correct: false, reason: 'That estimate is outside the 1% range. Check whether you compounded after each contribution.' };
       }
       case 'expression': {
         // Canonicalized-string equality (deterministic, no solver dependency).

@@ -265,3 +265,140 @@ export interface SavePlanRequest {
   profile: FinancialProfile;
   label: string;
 }
+
+// ---------------------------------------------------------------------------
+// Minimal base (hermes/base): two product choices
+//   - Prism Core  (K-12, school): linear vs exponential growth lesson
+//   - Prism Future (adult): investing + future snapshot
+// These interfaces are the shared contracts for the base implementation.
+// ---------------------------------------------------------------------------
+
+/** The two product surfaces selectable from the home screen. */
+export type ProductChoice = 'core' | 'future';
+
+// --- Prism Core: linear vs exponential growth lesson ---
+
+export interface GrowthParams {
+  /** Starting value at year 0. */
+  start: number;
+  /** Constant amount added each year (linear path). */
+  linearIncrement: number;
+  /** Multiplicative factor applied each year (exponential path), e.g. 1.1 = +10%. */
+  exponentialMultiplier: number;
+  /** Number of years to project. */
+  years: number;
+}
+
+export interface GrowthPoint {
+  year: number;
+  linear: number;
+  exponential: number;
+}
+
+export interface GrowthComparison {
+  points: GrowthPoint[];
+  /** Year index where exponential first exceeds linear (null if never in range). */
+  crossoverYear: number | null;
+  prediction: {
+    /** Learner's guess for which path is larger at the final year. */
+    guess: 'linear' | 'exponential';
+    /** Which path is actually larger at the final year. */
+    actual: 'linear' | 'exponential';
+    correct: boolean;
+  };
+}
+
+// --- Prism Future: investing onboarding + projection ---
+
+/** A suggested or custom keyword the user picks during Future onboarding. */
+export interface FutureKeyword {
+  label: string;
+  /** True when the user typed a custom keyword rather than picking a suggestion. */
+  custom: boolean;
+}
+
+export interface InvestmentProfile {
+  startingBalance: number;
+  monthlyContribution: number;
+  years: number;
+  /** Assumed annual return, percent (e.g. 7 = 7%). */
+  assumedReturnPct: number;
+  /** Annual fee, percent (e.g. 0.5 = 0.5%). */
+  feePct: number;
+  /** Optional inflation assumption for today's-dollar interpretation. */
+  inflationPct?: number;
+  /** Optional current age for start-now/start-later teaching comparisons. */
+  currentAge?: number;
+}
+
+export interface InvestmentPoint {
+  year: number;
+  balance: number;
+  contributed: number;
+  inflationAdjusted: number;
+}
+
+export interface InvestmentProjection {
+  balance: number;
+  contributed: number;
+  growth: number;
+  feeDrag: number;
+  inflationAdjustedBalance: number;
+  estimatedMonthlyIncome: number;
+  series: InvestmentPoint[];
+}
+
+/** Basic descriptions of the three asset classes the lesson introduces. */
+export interface AssetClassInfo {
+  id: 'etf' | 'stock' | 'bond';
+  title: string;
+  description: string;
+}
+
+// --- Prism Future: placeholder Future Snapshot card (no image gen yet) ---
+
+export interface FutureSnapshot {
+  keywords: FutureKeyword[];
+  projection: InvestmentProjection;
+  /** Placeholder flag: image generation is intentionally not implemented. */
+  imageGenerated: boolean;
+  note: string;
+  prompt: string;
+  status: 'ready' | 'generating' | 'generated' | 'unavailable';
+  imageUrl?: string;
+}
+
+export type FutureGoalCategory = 'security' | 'freedom' | 'lifestyle' | 'family' | 'achievement';
+
+export interface FutureGoalOption {
+  id: string;
+  label: string;
+  category: FutureGoalCategory;
+}
+
+export interface ProjectionComparison {
+  baseline: InvestmentProjection;
+  startLater: InvestmentProjection;
+  higherFee: InvestmentProjection;
+}
+
+/** Server-only implementation boundary. No provider credentials belong in clients. */
+export interface ImageGenerationProvider {
+  readonly id: string;
+  readonly enabled: boolean;
+  generate(prompt: string): Promise<{ imageUrl: string }>;
+}
+
+export interface TutorTurn {
+  kind: 'diagnostic' | 'prediction' | 'feedback' | 'mode-recommendation' | 'challenge' | 'summary';
+  text: string;
+  expectedAction: 'choose' | 'submit' | 'manipulate' | 'continue' | 'none';
+  choices?: string[];
+  recommendation?: ModeRecommendation;
+}
+
+// ---------------------------------------------------------------------------
+// Input sanitization (shared, deterministic)
+// ---------------------------------------------------------------------------
+
+export { parseFinite, parseFiniteAll } from './num.js';

@@ -6,12 +6,22 @@
   "main": "./dist/server.js",
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "build:ui": "vite build ui --config ui/vite.config.ts",
+    "dev:ui": "vite ui --config ui/vite.config.ts",
     "start": "node dist/server.js"
   },
   "dependencies": {
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
     "prism-shared": "^0.1.0",
     "prism-verifiers": "^0.1.0",
     "prism-curriculum": "^0.1.0",
     "prism-learning-engine": "^0.1.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.1.10",
+    "@types/react-dom": "^19.1.7",
+    "@vitejs/plugin-react": "^4.3.4",
+    "vite": "^6.1.0"
   }
 }
