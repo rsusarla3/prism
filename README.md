@@ -71,6 +71,12 @@ flowchart TD
 | `packages/curriculum` | Approved concept objects |
 | `packages/api-client` | Typed client boundary |
 
+**Pedagogy is evidence-based.** Design choices are grounded in peer-reviewed
+learning science — see [`docs/prism/RESEARCH_BASIS.md`](docs/prism/RESEARCH_BASIS.md)
+for the feature→evidence map, effect sizes, and the claims we deliberately avoid
+(notably the debunked "learning styles" myth). Cite from there when authoring
+curriculum or pitch copy.
+
 ## Run locally
 
 Requirements: Node.js 22+ and npm 10+.
