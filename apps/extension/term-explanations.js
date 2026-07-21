@@ -26,7 +26,6 @@ export function fallbackTermExplanation(term, contexts = [], language = 'en') {
 
   return `${cleanTerm} is a central concept in this page. Its exact meaning depends on the subject and how the author uses it.`;
 }
-
 function usableWikipediaExtract(payload) {
   if (!payload || typeof payload !== 'object' || payload.type === 'disambiguation') return '';
   const extract = normalizeText(payload.extract);
@@ -64,4 +63,3 @@ export async function explainTerm(term, { contexts = [], language = 'en', fetche
   }
   return { definition: fallbackTermExplanation(cleanTerm, contexts, wikiLanguage), source: 'Prism local explanation' };
 }
-
