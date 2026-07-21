@@ -11,7 +11,7 @@ export interface GeminiClientOptions {
   timeoutMs?: number;
 }
 
-export const DEFAULT_GEMINI_MODEL = 'gemini-3.5-flash';
+export const DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash';
 const DEFAULT_TIMEOUT_MS = 45_000;
 const MAX_ATTEMPTS = 3;
 

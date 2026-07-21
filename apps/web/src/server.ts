@@ -124,7 +124,7 @@ const compatibleModel = process.env.LLM_MODEL;
 const llmClient: LLMClient | null = compatibleBaseUrl && compatibleModel
   ? createOpenAICompatibleClient({ baseUrl: compatibleBaseUrl, model: compatibleModel, apiKey: process.env.LLM_API_KEY })
   : geminiApiKey
-    ? createGeminiClient({ apiKey: geminiApiKey, model: process.env.GEMINI_MODEL })
+    ? createGeminiClient({ apiKey: geminiApiKey, model: process.env.GEMINI_MODEL || undefined })
     : null;
 
 const EXTENSION_LANGUAGES = new Set(['en', 'zh', 'hi', 'es', 'fr', 'ar', 'bn', 'pt', 'ru', 'ur']);
