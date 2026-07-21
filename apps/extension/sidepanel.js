@@ -13,7 +13,8 @@ const WAYS = [
   { id: 'visualize', label: 'Visualize', hint: 'One map of the whole idea', color: 'var(--ray-4)', run: showVisualize },
   { id: 'listen', label: 'Listen', hint: 'Read aloud at your pace', color: 'var(--ray-5)', run: showListen },
 ];
-const RAY_Y = [30, 62, 94, 126, 158];
+let sceneObserver = null;
+let activeMode = null;  // drives the result view's accent colour
 const OUTPUT_LANGUAGES = [
   ['source', 'Page language'], ['en', 'English'], ['zh', 'Mandarin Chinese'],
   ['hi', 'Hindi'], ['es', 'Spanish'], ['fr', 'French'], ['ar', 'Arabic'],
@@ -132,20 +133,273 @@ async function post(path, body) {
   return data;
 }
 
-function prismSvg() {
-  const rays = WAYS.map((way, index) => `<path class="ray" data-ray="${way.id}" stroke="${way.color}" d="M 140 96 L 306 ${RAY_Y[index]}"/>`).join('');
-  return `<svg class="scene" viewBox="0 0 320 190" role="img" aria-label="The current page entering a prism and refracting into five ways to learn it.">
-    <path class="in" d="M 12 92 L 105 92"/><path class="spark" d="M 12 92 L 105 92"/>
-    <path class="side" d="M 122 38 L 136 30 L 168 132 L 154 140 Z"/>
-    <path class="base" d="M 90 140 L 104 132 L 168 132 L 154 140 Z"/>
-    <path class="face" d="M 122 38 L 154 140 L 90 140 Z"/><path class="internal" d="M 105 92 L 140 96"/>${rays}</svg>`;
+/**
+ * The stage: the page enters as a beam falling from the top, passes through a
+ * prism lying on its side, and disperses downward into the learning modes,
+ * which sit alternately right and left down the panel.
+ *
+ * Cards are real HTML buttons (so hint text wraps instead of clipping) and the
+ * rays are drawn afterwards in `drawScene`, measured against where the cards
+ * actually landed. Hard-coded ray coordinates cannot survive a card that wraps
+ * to two lines or a panel the user has resized.
+ */
+/** Where each mode sits around the prism. */
+// Positions come from the Figma design: Quiz and Listen flank the prism, then
+// Summarize, Key terms and Visualize step down beneath it.
+const CARD_ORDER = ['quiz', 'listen', 'summarize', 'terms', 'visualize'];
+// Words that fall out of the source chip into the prism.
+const STREAM_WORDS = ['VALUE', 'CHOICE', 'SCARCITY', 'TRADEOFF'];
+// One full turn of the prism. Must match the `hexspin` duration in the
+// stylesheet — the per-mode highlight is phased against it.
+const SPIN_SECONDS = 45;
+
+function wayButton(way) {
+  return `<button class="way" data-way="${way.id}" style="--mode:${way.color}">
+    <span class="bar"></span>
+    <b>${esc(way.label)}</b>
+    <small>${esc(way.hint)}</small>
+    <span class="arrow" aria-hidden="true">\u2197</span>
+  </button>`;
 }
 
+/**
+ * A pentagonal torus — one face per learning mode.
+ *
+ * Vertices sit at 72° intervals offset by 36°, which puts each FACE normal on a
+ * card's bearing rather than a corner. Depth is a second ring offset by
+ * (dx, dy); the whole shape is then shifted by half that offset so the bore
+ * stays optically centred on the source instead of drifting with the extrusion.
+ */
+function pentaTorusSvg() {
+  const cx = 100;
+  const cy = 100;
+  const R = 92;   // outer radius
+  const r = 62;   // bore radius — the hole the page sits in
+  const dx = 13;
+  const dy = -10;
+  const sides = 5;
+
+  const ring = (radius) => Array.from({ length: sides }, (_, i) => {
+    // -90° puts a face at the top; +36° turns corners into face centres.
+    const angle = (Math.PI / 180) * (-90 + 36 + (360 / sides) * i);
+    return [
+      cx - dx / 2 + radius * Math.cos(angle),
+      cy - dy / 2 + radius * Math.sin(angle),
+    ];
+  });
+  const outer = ring(R);
+  const inner = ring(r);
+  const shift = (list) => list.map(([x, y]) => [x + dx, y + dy]);
+  const pts = (list) => list.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
+  const loop = (list) => `M ${list.map(([x, y]) => `${x.toFixed(1)} ${y.toFixed(1)}`).join(' L ')} Z`;
+  const face = (o, i) => `${loop(o)} ${loop(i)}`;
+
+  const wall = (list, gradient, opacity) => list.map((_, i) => {
+    const j = (i + 1) % sides;
+    const b = shift(list);
+    return `<polygon points="${pts([list[i], b[i], b[j], list[j]])}"
+      fill="url(#${gradient})" stroke="#dce7ff" stroke-opacity="${opacity}"/>`;
+  }).join('');
+
+  return `<svg viewBox="0 0 200 200">
+    <defs>
+      <linearGradient id="hex-front" x1="0" y1="0" x2="1" y2="1">
+        <stop stop-color="#dbe7ff" stop-opacity=".34"/>
+        <stop offset=".52" stop-color="#7893de" stop-opacity=".30"/>
+        <stop offset="1" stop-color="#1b275e" stop-opacity=".88"/>
+      </linearGradient>
+      <linearGradient id="hex-wall" x1="0" y1="0" x2="1" y2=".7">
+        <stop stop-color="#9eb8ff" stop-opacity=".26"/>
+        <stop offset="1" stop-color="#172252" stop-opacity=".9"/>
+      </linearGradient>
+      <linearGradient id="hex-bore" x1="0" y1="0" x2="1" y2="1">
+        <stop stop-color="#0b1130" stop-opacity=".92"/>
+        <stop offset="1" stop-color="#2b3a7a" stop-opacity=".7"/>
+      </linearGradient>
+    </defs>
+    <g class="hex">
+      <path d="${face(shift(outer), shift(inner))}" fill-rule="evenodd"
+        fill="url(#hex-wall)" stroke="#dce7ff" stroke-opacity=".24"/>
+      ${wall(outer, 'hex-wall', '.2')}
+      ${wall(inner, 'hex-bore', '.16')}
+      <path d="${face(outer, inner)}" fill-rule="evenodd"
+        fill="url(#hex-front)" stroke="#e4ecff" stroke-opacity=".68"/>
+    </g>
+  </svg>`;
+}
+
+/**
+ * The white ray inside the bore: it turns clockwise at the same rate as the
+ * ring, and whichever mode it is pointing at is the one lit outside.
+ *
+ * The alignment is derived, not eyeballed. Ray `i` is delayed by -i·T/n and
+ * peaks at PEAK_AT through its own cycle, so it is brightest at
+ * t = i·T/n + PEAK_AT. The sweeper turns 360°/T, so its delay is solved to put
+ * it on that card's bearing at exactly that moment.
+ */
+const PEAK_AT = 0.07;              // midpoint of the full-brightness hold
+
+/**
+ * Register --lit so it interpolates.
+ *
+ * An unregistered custom property is just a token: keyframes swap it at the
+ * halfway point instead of easing, which makes the highlight snap between
+ * modes however carefully the keyframes are written. The @property rule in the
+ * stylesheet is not reliably applied here, so register it explicitly.
+ */
+function registerLitProperty() {
+  try {
+    CSS.registerProperty({ name: '--lit', syntax: '<number>', inherits: false, initialValue: '1' });
+  } catch {
+    // Already registered, or the engine does not support it — the highlight
+    // still works, it just steps rather than eases.
+  }
+}
+const FIRST_CARD_ANGLE = -90;      // the ring starts at the top
+
+/** Delay (seconds) for ray `index`, so the modes peak in clockwise order. */
+function rayPhaseSeconds(index, count) {
+  // Negative delays start the animation already in progress. Counting down from
+  // `count` makes later cards peak later in wall time, matching the clockwise
+  // travel of the sweeper — counting up ran the highlight anticlockwise.
+  return -(((count - index) % count) * SPIN_SECONDS) / count;
+}
+
+function sweeperDelaySeconds() {
+  const degPerSecond = 360 / SPIN_SECONDS;
+  const tPeak = PEAK_AT * SPIN_SECONDS;
+  // CSS applies delay as angle(t) = degPerSecond · (t − delay). Solve
+  // angle(tPeak) ≡ FIRST_CARD_ANGLE for delay, then shift it negative so the
+  // sweeper is already turning at load instead of waiting.
+  const delay = tPeak - FIRST_CARD_ANGLE / degPerSecond;
+  return ((delay % SPIN_SECONDS) + SPIN_SECONDS) % SPIN_SECONDS - SPIN_SECONDS;
+}
+
+function sweeperSvg(cx, cy, size) {
+  const bore = (62 / 200) * size;          // inner wall of the ring
+  const from = bore * 0.12;                // leaves the page itself
+  const to = bore * 0.98;
+  const delay = sweeperDelaySeconds().toFixed(2);
+  // Three offset pulses on the same path read as light being emitted, rather
+  // than one rigid spoke sweeping round.
+  const pulses = [0, 0.36, 0.72].map((offset) => `
+    <line class="sweep-pulse" pathLength="100" style="animation-delay:${(-offset * 1.6).toFixed(2)}s"
+      x1="${(cx + from).toFixed(1)}" y1="${cy.toFixed(1)}"
+      x2="${(cx + to).toFixed(1)}" y2="${cy.toFixed(1)}"/>`).join('');
+  return `<g class="sweeper" style="transform-origin:${cx.toFixed(1)}px ${cy.toFixed(1)}px;
+      animation-delay:${delay}s">
+    <line class="sweep-track" x1="${(cx + from).toFixed(1)}" y1="${cy.toFixed(1)}"
+      x2="${(cx + to).toFixed(1)}" y2="${cy.toFixed(1)}"/>
+    ${pulses}
+  </g>`;
+}
+
+function prismSvg() {
+  const cards = CARD_ORDER
+    .map((id) => wayButton(WAYS.find((way) => way.id === id)))
+    .join('');
+  const host = page?.restricted ? 'this page' : safeHost(page?.url);
+  return `<section class="stage">
+    <svg class="rays" aria-hidden="true"></svg>
+    <div class="source-halo" aria-hidden="true"></div>
+    <div class="prism" aria-hidden="true">${pentaTorusSvg()}</div>
+    <button class="source-chip source-origin" id="source-origin" aria-pressed="false"
+            title="The page you're on is the light">
+      <i></i><code>${esc(host)}</code>
+    </button>
+    <div class="mode-grid">${cards}</div>
+  </section>`;
+}
+
+/**
+ * Draw a ray from the prism to each card. Origins follow the design: the two
+ * side modes leave from the prism's flanks, the three below from quarter,
+ * half and three-quarter points along its base.
+ */
+function drawScene() {
+  const stage = document.querySelector('.stage');
+  const svg = stage?.querySelector('svg.rays');
+  const prism = stage?.querySelector('.prism');
+  if (!stage || !svg || !prism) return;
+
+  const stageBox = stage.getBoundingClientRect();
+  const prismBox = prism.getBoundingClientRect();
+  if (!stageBox.width || !stageBox.height) return;
+  svg.setAttribute('viewBox', `0 0 ${Math.round(stageBox.width)} ${Math.round(stageBox.height)}`);
+
+  const px = prismBox.left - stageBox.left;
+  const py = prismBox.top - stageBox.top;
+  // Listen and Quiz sit beside the prism and are fed from its upper flanks;
+  // the lower three leave across the base, each from the side its card is on
+  // so the downward rays never cross.
+  const w = prismBox.width;
+  const h = prismBox.height;
+  // The source sits at the centre of the crystal and the modes ring it at equal
+  // angles. An ellipse rather than a circle: a side panel is much taller than
+  // it is wide, so a true circle would push the flanking cards off the edge.
+  // The stage defines the centre and the crystal is hung from it, not the other
+  // way round — deriving the centre from the prism's own box would be circular,
+  // since the prism is positioned by `--core-y`.
+  const centreX = stageBox.width / 2;
+  const centreY = stageBox.height * 0.46;
+  stage.style.setProperty('--core-y', `${centreY.toFixed(1)}px`);
+  // Big enough to clear the ring, small enough that the outermost cards stay
+  // inside the panel: half the panel minus half a card.
+  const cardHalf = 50;
+  const radiusX = Math.max(stageBox.width / 2 - cardHalf, 118);
+  const radiusY = Math.min(stageBox.height * 0.38, 158);
+  // Leave from the ring's OUTER wall (R=92 in a 200 viewBox, flat-to-flat), not
+  // the old solid-hexagon radius — that put the origins inside the bore, behind
+  // the source chip.
+  // Face centres of a pentagon sit at R·cos(36°) from the middle.
+  const inradius = Math.min(w, h) * (92 * Math.cos(Math.PI / 5)) / 200;
+  const step = (Math.PI * 2) / CARD_ORDER.length;
+
+  svg.innerHTML = CARD_ORDER.map((id, index) => {
+    const card = stage.querySelector(`[data-way="${id}"]`);
+    const way = WAYS.find((candidate) => candidate.id === id);
+    if (!card || !way) return '';
+
+    // Start at the top and go clockwise, so the spectrum reads round the ring.
+    const angle = -Math.PI / 2 + index * step;
+    const cardX = centreX + radiusX * Math.cos(angle);
+    const cardY = centreY + radiusY * Math.sin(angle);
+    card.style.left = `${cardX.toFixed(1)}px`;
+    card.style.top = `${cardY.toFixed(1)}px`;
+
+    // The ray runs along the same bearing: out of the glass, into the card.
+    // Stop at the card's own edge along that bearing — using the larger of its
+    // two dimensions over-trimmed the near-vertical rays into stubs.
+    const box = card.getBoundingClientRect();
+    const cos = Math.abs(Math.cos(angle));
+    const sin = Math.abs(Math.sin(angle));
+    const toEdge = Math.min(
+      cos > 1e-3 ? (box.width / 2) / cos : Infinity,
+      sin > 1e-3 ? (box.height / 2) / sin : Infinity,
+    );
+    const reach = Math.max(0, Math.hypot(cardX - centreX, cardY - centreY) - toEdge - 3);
+    const x1 = centreX + inradius * Math.cos(angle);
+    const y1 = centreY + inradius * Math.sin(angle);
+    const x2 = centreX + reach * Math.cos(angle);
+    const y2 = centreY + reach * Math.sin(angle);
+
+    // Phase the highlight to the spin so each mode lights as a face comes
+    // round to it — one after another, never all at once.
+    const phase = rayPhaseSeconds(index, CARD_ORDER.length);
+    card.style.setProperty('--phase', `${phase}s`);
+    return `<path data-ray="${id}" stroke="${way.color}" style="--phase:${phase}s"
+      d="M ${x1.toFixed(1)} ${y1.toFixed(1)} L ${x2.toFixed(1)} ${y2.toFixed(1)}"/>`;
+  }).join('') + sweeperSvg(centreX, centreY, Math.min(w, h));
+}
+
+/** The compact source line carried into every result view. */
 function sourceBlock() {
   const host = page?.restricted ? 'this page is protected' : safeHost(page?.url);
-  return `<p class="eyebrow">The page you're on</p>
-    <div class="source"><span class="dot"></span><span class="url">${esc(host)}</span></div>
-    <p class="subtle">${esc(page?.title || pageSource?.title || '')}</p>`;
+  const words = analysis ? `${analysis.wordCount.toLocaleString()} words` : '';
+  return `<div class="result-source">
+      <span class="mini-light"></span><code>${esc(host)}</code>
+      ${words ? `<span class="plain"> · ${esc(words)}</span>` : ''}
+    </div>`;
 }
 
 function safeHost(url) {
@@ -194,17 +448,45 @@ function renderHome() {
     app.innerHTML = `${sourceBlock()}<div class="out"><p class="err">Chrome has not granted Prism access to this tab. Reload the page, then click the Prism toolbar icon while this tab is active.</p><p class="note">${esc(page.message || '')}</p></div>`;
     return;
   }
-  const readiness = analysis ? `${analysis.wordCount.toLocaleString()} words analyzed` : 'Ready to analyze';
-  app.innerHTML = `${sourceBlock()}${prismSvg()}<div class="ready"><span></span>${esc(readiness)}</div>
-    <label class="language-picker">Show results in<select id="output-language">${OUTPUT_LANGUAGES.map(([value, label]) => `<option value="${value}" ${value === outputLanguage ? 'selected' : ''}>${esc(label)}</option>`).join('')}</select></label>
-    <p class="eyebrow">Choose a learning mode</p>
-    <div class="ways">${WAYS.map((way) => `<button class="way" data-way="${way.id}"><span class="bar" style="background:${way.color}"></span><span class="txt"><b>${esc(way.label)}</b><span>${esc(way.hint)}</span></span></button>`).join('')}</div>
-    <p class="note">Only this active page or the text you selected is analyzed.</p>`;
+  registerLitProperty();
+  syncHeader();
+  app.innerHTML = `<p class="section-label">Choose a learning mode</p>
+    ${prismSvg()}
+    <p class="footnote">Only this active page or the text you selected is analyzed.</p>`;
   bindWays();
-  document.querySelector('#output-language')?.addEventListener('change', async (event) => {
-    outputLanguage = event.target.value;
-    await chrome.storage.local.set({ outputLanguage });
+  drawScene();
+  // Rays are measured from laid-out cards, so re-measure whenever the panel
+  // is resized — a side panel is a user-draggable width.
+  sceneObserver?.disconnect();
+  sceneObserver = new ResizeObserver(() => drawScene());
+  sceneObserver.observe(document.querySelector('.stage'));
+
+  bindMagnify();
+
+  // The source chip is the light: pressing it drives the stream harder.
+  const origin = document.querySelector('#source-origin');
+  origin?.addEventListener('click', () => {
+    const stage = document.querySelector('.stage');
+    const on = stage.classList.toggle('source-active');
+    origin.setAttribute('aria-pressed', String(on));
   });
+}
+
+/** Header carries the language picker and the analysed-words readout. */
+function syncHeader() {
+  const select = document.querySelector('#output-language');
+  if (select && !select.options.length) {
+    select.innerHTML = OUTPUT_LANGUAGES
+      .map(([value, label]) => `<option value="${value}">${esc(label)}</option>`)
+      .join('');
+    select.addEventListener('change', async (event) => {
+      outputLanguage = event.target.value;
+      await chrome.storage.local.set({ outputLanguage });
+    });
+  }
+  if (select) select.value = outputLanguage;
+  const readout = document.querySelector('#analyzed-text');
+  if (readout) readout.textContent = analysis ? `${analysis.wordCount.toLocaleString()} words` : 'Ready';
 }
 
 function bindWays() {
@@ -214,11 +496,71 @@ function bindWays() {
     button.addEventListener('mouseleave', () => highlightRay(null));
     button.addEventListener('focus', () => highlightRay(way.id));
     button.addEventListener('blur', () => highlightRay(null));
-    button.addEventListener('click', () => void way.run());
+    button.addEventListener('click', () => { activeMode = way; void way.run(); });
   });
 }
 
+/**
+ * Dock-style magnification.
+ *
+ * Each card scales by how close the pointer is to its centre, so the card under
+ * the cursor grows most and its neighbours taper off. That lets the resting
+ * cards stay small — the list reads as uncrowded without losing legibility on
+ * the one you are actually reaching for.
+ *
+ * Scale is applied through a CSS custom property rather than by writing
+ * `transform` directly, so the stylesheet keeps ownership of the transform and
+ * the reduced-motion and coarse-pointer fallbacks still win.
+ */
+const MAGNIFY_RANGE = 130;   // px of influence either side of a card's centre
+const MAGNIFY_AMOUNT = 0.16; // peak growth, 1.0 -> 1.16
+
+function bindMagnify() {
+  const grid = document.querySelector('.mode-grid');
+  if (!grid) return;
+  if (window.matchMedia?.('(hover: none)').matches) return;
+  if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
+
+  const cards = [...grid.querySelectorAll('.way')];
+
+  // Centres come from the unscaled layout, cached once. Measuring live rects
+  // would feed each card's own scale back into its centre and make the row
+  // jitter as it grows.
+  let centres = [];
+  const remeasure = () => {
+    const gridBox = grid.getBoundingClientRect();
+    centres = cards.map((card) => [
+      gridBox.left + card.offsetLeft + card.offsetWidth / 2,
+      gridBox.top + card.offsetTop + card.offsetHeight / 2,
+    ]);
+  };
+  remeasure();
+
+  grid.addEventListener('pointermove', (event) => {
+    // Five cards, so this is cheap enough to run straight off the event —
+    // no rAF, which also keeps it working when the panel is not compositing.
+    for (let i = 0; i < cards.length; i += 1) {
+      // The cards are scattered around the prism, not stacked, so proximity
+      // has to be measured in two dimensions.
+      const dx = centres[i][0] - event.clientX;
+      const dy = centres[i][1] - event.clientY;
+      const distance = Math.hypot(dx, dy);
+      // Squared falloff: flat-topped near the pointer, quick taper past it.
+      const falloff = Math.max(0, 1 - (distance / MAGNIFY_RANGE) ** 2);
+      cards[i].style.setProperty('--scale', (1 + MAGNIFY_AMOUNT * falloff).toFixed(3));
+    }
+  });
+
+  grid.addEventListener('pointerleave', () => {
+    for (const card of cards) card.style.setProperty('--scale', '1');
+  });
+
+  window.addEventListener('resize', remeasure);
+}
+
 function highlightRay(id) {
+  // Hovering suspends the automatic sweep so the two never fight over what is lit.
+  document.querySelector('.stage')?.classList.toggle('focusing', id !== null);
   document.querySelectorAll('[data-ray]').forEach((ray) => {
     ray.classList.toggle('on', id !== null && ray.dataset.ray === id);
     ray.classList.toggle('dim', id !== null && ray.dataset.ray !== id);
@@ -229,15 +571,20 @@ function renderLoading(label) {
   app.innerHTML = `${sourceBlock()}<div class="loading"><i></i><p>${esc(label)}</p></div>`;
 }
 
+/** Every result view wears its mode's colour on the card spine and kicker. */
 function finishResult(html, note = '') {
-  app.innerHTML = `${sourceBlock()}<div class="out">${html}</div>${note ? `<p class="note">${esc(note)}</p>` : ''}`;
-  app.append(backButton());
+  // Each mode already renders its own .result-head; we only supply the accent.
+  const colour = activeMode?.color || 'var(--ray-6)';
+  app.innerHTML = `${sourceBlock()}
+    <div class="out" style="--mode:${colour}">${html}</div>
+    ${note ? `<p class="note">${esc(note)}</p>` : ''}`;
+  app.prepend(backButton());
 }
 
 function backButton() {
   const button = document.createElement('button');
   button.className = 'back';
-  button.textContent = '← Back to the five modes';
+  button.innerHTML = '<span class="glyph" aria-hidden="true">←</span>Back';
   button.onclick = renderHome;
   return button;
 }
