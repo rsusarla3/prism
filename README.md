@@ -32,8 +32,8 @@ flowchart TD
 
     classDef done fill:#e2e8f0,stroke:#334155,stroke-width:2px,color:#0f172a;
     classDef todo fill:#ffffff,stroke:#94a3b8,stroke-width:2px,stroke-dasharray:5 4,color:#334155;
-    class PAGE,VER,OUT done;
-    class EXT,UND,GEN todo;
+    class PAGE,UND,GEN,VER,OUT done;
+    class EXT todo;
 ```
 
 Capture, persistence, structured generation, validation, and the lesson library
@@ -144,9 +144,11 @@ For the GitHub extension dev-mode preview, open
 It supplies one sample page when opened outside Chrome's extension runtime,
 while still using the real local source-library API.
 
-AI generation needs a server-side `GEMINI_API_KEY` environment variable.
-Without it, learning-material generation returns `501`; capture and the rest of
-the app still work. Optional `GEMINI_MODEL` overrides the default model id.
+Copy [`.env.example`](.env.example) to `.env` at the repository root; `npm run
+dev` loads it automatically. AI generation can use either a server-side
+`GEMINI_API_KEY` or an OpenAI-compatible endpoint. Without a configured
+provider, generation returns `501`; capture and the rest of the app still work.
+Optional `GEMINI_MODEL` overrides the Gemini default.
 Captured sources and their generated learning assets are stored in
 `data/prism.sqlite`; optional `PRISM_DB_PATH` changes that location. Each asset
 is generated and cached separately: selecting one ray never requests the other
