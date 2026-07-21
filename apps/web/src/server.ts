@@ -26,7 +26,7 @@ import {
   SUGGESTED_KEYWORDS,
   FUTURE_GOALS,
 } from 'prism-verifiers';
-import { generateStudyBundle, type LLMClient } from 'prism-generation';
+import { generateStudyBundle, createGeminiClient, type LLMClient } from 'prism-generation';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
@@ -87,10 +87,13 @@ function handleFutureInvest(body: { startingBalance: number; monthlyContribution
 }
 
 // --- Generation: raw captured text -> validated study bundle ---
-// No LLM provider is wired yet (see docs/prism/GENERATION_SPEC.md). Plugging
-// one in is a one-line change here once a provider is chosen; until then the
-// route reports 501 so callers get a clear signal instead of a silent stub.
-const llmClient: LLMClient | null = null;
+// Provider is Gemini (see docs/prism/GENERATION_SPEC.md). Set GEMINI_API_KEY
+// to enable; without it the route reports 501 instead of crashing, so local
+// dev without a key still works for every other endpoint.
+const geminiApiKey = process.env.GEMINI_API_KEY;
+const llmClient: LLMClient | null = geminiApiKey
+  ? createGeminiClient({ apiKey: geminiApiKey, model: process.env.GEMINI_MODEL })
+  : null;
 
 async function handleGenerate(body: GenerateRequest) {
   if (!llmClient) {

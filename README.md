@@ -139,6 +139,12 @@ npm run dev
 
 Open [http://localhost:8787](http://localhost:8787). The server binds to `0.0.0.0` by default for same-hotspot demos; set `HOST=127.0.0.1` to keep it local.
 
+`POST /api/generate` (raw text to study bundle, see
+[`docs/prism/GENERATION_SPEC.md`](docs/prism/GENERATION_SPEC.md)) needs a
+`GEMINI_API_KEY` environment variable. Without it the route returns `501`;
+every other route works with no key. Optional `GEMINI_MODEL` overrides the
+default model id.
+
 For UI development with hot reload, keep the API server running and start Vite in another terminal:
 
 ```bash
