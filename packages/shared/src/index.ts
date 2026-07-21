@@ -398,6 +398,98 @@ export interface TutorTurn {
 }
 
 // ---------------------------------------------------------------------------
+// Generation backend — raw text in, validated study bundle out.
+// See docs/prism/GENERATION_SPEC.md for the rationale behind every field.
+// ---------------------------------------------------------------------------
+
+export interface GenerateRequest {
+  text: string;
+  sourceUrl?: string;
+  title?: string;
+  targetGrade?: number;
+  homeLanguage?: string;
+}
+
+export type ContentType = 'narrative' | 'expository' | 'problem' | 'data';
+
+export interface Gloss {
+  term: string;
+  definition: string;
+  homeLanguage?: string;
+}
+
+export interface ReadSegment {
+  text: string;
+  glosses: Gloss[];
+  recap: string;
+}
+
+export interface WatchStep {
+  caption: string;
+  description: string;
+}
+
+export interface TimelineEntry {
+  label: string;
+  detail: string;
+  order: number;
+}
+
+export interface DataSeries {
+  name: string;
+  points: Array<{ x: number | string; y: number }>;
+}
+
+export interface QuizOption {
+  text: string;
+  correct: boolean;
+  /** Required on every option, correct or not — testing-with-feedback is 0.73 SD vs 0.39 without. */
+  feedback: string;
+}
+
+export interface QuizItem {
+  kind: 'recall' | 'transfer';
+  stem: string;
+  options: QuizOption[];
+  explanation: string;
+}
+
+export interface StudyBundle {
+  meta: {
+    title: string;
+    contentType: ContentType;
+    inferredGrade: number;
+    conceptIds: string[];
+    language: string;
+    /** What stage 0 removed and why — the coherence principle (g=1.00) is subtractive. */
+    droppedForCoherence: string[];
+  };
+  read: {
+    segments: ReadSegment[];
+  };
+  listen: {
+    script: string;
+    segmentIndex: number[];
+    highlightLeadMs: number;
+  };
+  watch: {
+    kind: 'diagram' | 'sequence';
+    steps: WatchStep[];
+    altText: string;
+  };
+  explore: {
+    timeline?: TimelineEntry[];
+    data?: {
+      caption: string;
+      series: DataSeries[];
+    };
+  };
+  quiz: {
+    items: QuizItem[];
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Input sanitization (shared, deterministic)
 // ---------------------------------------------------------------------------
 
