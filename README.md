@@ -2,18 +2,24 @@
 
 **One concept. As many ways as it takes to make it click.**
 
-Prism is an adaptive learning copilot with two focused experiences:
+Prism is an adaptive learning copilot with two experiences:
 
-- **Prism Core** teaches linear versus exponential growth through prediction, synchronized graphs and tables, diagnostics, transparent mode recommendations, and a transfer challenge.
-- **Prism Future** connects investing concepts to 3–5 user-selected life goals through deterministic projections, time and fee comparisons, asset tradeoffs, and an aspirational Future Snapshot prompt.
+- **Prism Core** teaches linear and exponential growth through prediction, linked graphs and tables, diagnostics, mode recommendations, and a transfer challenge.
+- **Prism Future** applies those ideas to 3–5 user-selected life goals with deterministic projections, time and fee comparisons, asset tradeoffs, and a Future Snapshot prompt.
 
 The hackathon build is educational software, not an answer bot, brokerage calculator, or personalized investment adviser.
 
+## Built with Codex
+
+Codex was used throughout the project to plan, build, test, and polish Prism.
+It helped with the web app, Chrome extension, generation pipeline, deterministic
+verifiers, and documentation. The team made the product decisions and reviewed
+the implementation; this README describes what is actually in the repository.
+
 ## Architecture
 
-A learner highlights anything on the web. Prism turns that selection into a
-lesson that teaches the same idea through several modalities at once, a design
-grounded in peer-reviewed learning science
+A learner highlights a page or a piece of text. Prism turns it into a lesson
+that presents the idea in several formats, using a design grounded in peer-reviewed learning science
 (see [Research basis](docs/prism/RESEARCH_BASIS.md)).
 
 ### Pipeline
@@ -37,8 +43,8 @@ flowchart TD
 ```
 
 Capture, persistence, structured generation, validation, and the lesson library
-now run end to end. The learner explicitly chooses which tabs or selection to
-share before Prism reads page text.
+work end to end. Prism reads page text only after the learner chooses a tab or
+selection to share.
 
 ### Generated assets and their evidence
 
@@ -71,12 +77,12 @@ flowchart LR
     class A1,B1,C1,D1,E1 evi;
 ```
 
-Two constraints hold the design together. The model writes content but never
-performs arithmetic: every number a learner sees comes from a deterministic
-verifier in `packages/verifiers`, and answers stay gated until a real attempt is
-recorded. The model also never selects a modality to match a learner's supposed
-style; every learner receives every modality, because modality matching is not
-supported by the evidence.
+Two implementation rules matter here. The model can write content but cannot
+do the math: every number shown to a learner comes from a deterministic verifier in
+`packages/verifiers`, and answers remain locked until a real attempt is
+recorded. Prism does not try to match a learner to a supposed learning style;
+everyone can use every modality because the evidence does not support that kind
+of matching.
 
 The backend contract for steps 2 and 3 — raw text in, validated study bundle out
 — is specified in
@@ -106,10 +112,9 @@ flowchart LR
     class SRV,GROW,INV eng;
 ```
 
-> **The full circle:** Core's linear path (`+increment`) and Future's "you
-> contribute" line are the *same shape*. Core's exponential path (`×multiplier`)
-> and Future's compounding "balance" are the *same shape*. **Core's crossover is
-> Future's growth.** One engine, two audiences.
+Core's linear path (`+increment`) matches Future's “you contribute” line. Core's
+exponential path (`×multiplier`) matches Future's compounding balance. The same
+growth idea is used in both experiences.
 
 | Location | Responsibility |
 |---|---|
@@ -121,11 +126,10 @@ flowchart LR
 | `packages/curriculum` | Approved concept objects |
 | `packages/api-client` | Typed client boundary |
 
-**Pedagogy is evidence-based.** Design choices are grounded in peer-reviewed
-learning science — see [`docs/prism/RESEARCH_BASIS.md`](docs/prism/RESEARCH_BASIS.md)
-for the feature→evidence map, effect sizes, and the claims we deliberately avoid
-(notably the debunked "learning styles" myth). Cite from there when authoring
-curriculum or pitch copy.
+The teaching choices are grounded in peer-reviewed learning science. See
+[`docs/prism/RESEARCH_BASIS.md`](docs/prism/RESEARCH_BASIS.md) for the
+feature-to-evidence map, effect sizes, and claims Prism intentionally avoids.
+Use it when writing curriculum or pitch copy.
 
 ## Run locally
 
@@ -141,8 +145,8 @@ Open [http://localhost:8787](http://localhost:8787). The server binds to `0.0.0.
 
 For the GitHub extension dev-mode preview, open
 [http://localhost:8787/extension-dev/](http://localhost:8787/extension-dev/).
-It supplies one sample page when opened outside Chrome's extension runtime,
-while still using the real local source-library API.
+Outside Chrome's extension runtime, it supplies a sample page and still uses
+the local source-library API.
 
 Copy [`.env.example`](.env.example) to `.env` at the repository root; `npm run
 dev` loads it automatically. AI generation can use either a server-side
@@ -162,8 +166,8 @@ compatible endpoint wins. Provider credentials stay in the server process and
 are never shipped in the Chrome extension.
 
 `POST /api/generate/media` is a second, optional pass: give it a study bundle
-and it returns the same bundle with `listen.audio` attached. It is deliberately
-a separate call so lesson text returns as soon as it is ready rather than
+and it returns the same bundle with `listen.audio` attached. It stays separate
+so lesson text returns as soon as it is ready rather than
 waiting on speech synthesis. Media is additive — when no audio is attached, a
 renderer falls back to the browser's `SpeechSynthesis`, which also supplies the
 word boundaries that karaoke highlighting needs. `GEMINI_SPEECH_MODEL` and
@@ -197,19 +201,17 @@ capture runs only after the learner invokes Prism, and it reads only that page
 or an explicit selection from the same page.
 
 Prism requests HTTP/HTTPS host access because Chrome does not consistently
-extend `activeTab` access to a persistent side panel. This permission makes the
-"works on any website" interaction reliable; the implementation still queries
-only the currently active tab after invocation, never scans tabs in the
-background, and applies the sensitive-page guard before automatic capture.
+extend `activeTab` access to a persistent side panel. Even with that permission,
+it queries only the active tab after the learner invokes it, never scans tabs in
+the background, and checks for sensitive pages before automatic capture.
 
-All five extension modes are curriculum-neutral. Their only content input is
-the active page or explicit selection: Prism Core and Prism Future demo content
-is never injected into extension results. The local analyzer ranks terms using
-page frequency, headings, position, and language-specific filler-word filters.
-It supports readable text inside permitted page frames and accessible labels
-for equations, diagrams, and canvases. Sensitive account, health, email, and
-password pages are blocked from automatic capture; selected text remains the
-explicit fallback.
+All five extension modes work from the active page or an explicit selection;
+Prism Core and Prism Future demo content is never added to their results. The
+local analyzer ranks terms by page frequency, headings, and position, with
+language-specific filler-word filters. It supports readable text in permitted
+page frames and accessible labels for equations, diagrams, and canvases.
+Sensitive account, health, email, and password pages are blocked from automatic
+capture; selected text remains the fallback.
 
 Results can be shown in the page language or English, Mandarin Chinese, Hindi,
 Spanish, French, Arabic, Bengali, Portuguese, Russian, or Urdu. This choice
